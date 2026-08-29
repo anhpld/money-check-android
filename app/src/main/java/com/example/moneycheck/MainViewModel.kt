@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 
 data class OpenAiConnectionState(
@@ -30,6 +31,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val appSettings = AppSettings.get(application)
 
     val notifications = repository.notifications.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+    val inboxNotifications = repository.inboxNotifications.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+    val savedNotifications = repository.savedNotifications.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList(),
@@ -70,33 +81,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         NotificationAnalysisScheduler.enqueue(getApplication(), notificationId)
     }
 
-    fun dismissConfirmation(notificationId: Long) {
-        _confirmationId.value = null
-        viewModelScope.launch(Dispatchers.IO) { repository.markHandled(notificationId) }
+    fun saveNotification(notificationId: Long) {
+        viewModelScope.launch(Dispatchers.IO) { repository.saveNotification(notificationId) }
+    }
+
+    fun deleteNotification(notificationId: Long) {
+        viewModelScope.launch(Dispatchers.IO) { repository.deleteNotification(notificationId) }
+    }
+
+    fun dismissConfirmation(notificationId: Long, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.markHandled(notificationId) }
+            _confirmationId.value = null
+            onComplete()
+        }
     }
 
     fun confirmTransaction(
         notification: CapturedNotificationEntity,
         direction: String,
         amount: Long,
-        currency: String,
-        purpose: String,
-        sender: String,
         recipient: String,
-        reference: String,
+        purpose: String,
+        onComplete: () -> Unit = {},
     ) {
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.confirm(
-                notification,
-                direction,
-                amount,
-                currency,
-                purpose,
-                sender,
-                recipient,
-                reference,
-            )
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.confirm(
+                    notification,
+                    direction,
+                    amount,
+                    recipient,
+                    purpose,
+                )
+            }
             _confirmationId.value = null
+            onComplete()
         }
     }
 
@@ -131,7 +151,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _openAiConnection.value = OpenAiConnectionState()
     }
 
-    fun saveSettings(model: String, apiKey: String, enabledPackages: Set<String>): Boolean {
+    fun ensureOpenAiModelsLoaded() {
+        if (!appSettings.snapshot().hasApiKey) return
+        if (_openAiConnection.value.isChecking || _openAiConnection.value.isVerified) return
+        validateOpenAiKey("")
+    }
+
+    fun saveSettings(
+        model: String,
+        prompt: String,
+        apiKey: String,
+        notificationRules: Map<String, Set<String>>,
+        overlayEnabled: Boolean,
+    ): Boolean {
         val normalizedApiKey = apiKey.trim()
         if (normalizedApiKey.isNotEmpty() && normalizedApiKey.sha256() != verifiedApiKeyHash) {
             _openAiConnection.value = OpenAiConnectionState(
@@ -144,8 +176,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return false
         }
         appSettings.saveModel(model)
+        appSettings.savePrompt(prompt)
         if (normalizedApiKey.isNotEmpty()) appSettings.saveApiKey(normalizedApiKey)
-        appSettings.saveEnabledPackages(enabledPackages)
+        appSettings.saveNotificationRules(notificationRules)
+        appSettings.saveOverlayEnabled(overlayEnabled)
         _settings.value = appSettings.snapshot()
         return true
     }
@@ -156,8 +190,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = appSettings.snapshot()
     }
 
-    fun clearNotifications() {
-        viewModelScope.launch(Dispatchers.IO) { repository.clearNotifications() }
+    fun clearInbox() {
+        viewModelScope.launch(Dispatchers.IO) { repository.clearInbox() }
+    }
+
+    fun clearSavedNotifications() {
+        viewModelScope.launch(Dispatchers.IO) { repository.clearSavedNotifications() }
     }
 
     fun deleteTransaction(id: Long) {

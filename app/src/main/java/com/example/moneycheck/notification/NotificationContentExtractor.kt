@@ -22,16 +22,20 @@ internal object NotificationContentExtractor {
             ?.map { it.toString().trim() }
             ?.filter(String::isNotEmpty)
             .orEmpty()
-        val messages = runCatching {
-            Notification.MessagingStyle.Message.getMessagesFromBundleArray(
-                extras.getParcelableArray(Notification.EXTRA_MESSAGES),
-            )
-        }.getOrDefault(emptyList()).mapNotNull { message ->
-            val messageText = message.text?.toString()?.trim().orEmpty()
-            if (messageText.isEmpty()) null else {
-                val sender = message.sender?.toString()?.trim().orEmpty()
-                if (sender.isEmpty()) messageText else "$sender\n$messageText"
+        val messages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                Notification.MessagingStyle.Message.getMessagesFromBundleArray(
+                    extras.getParcelableArray(Notification.EXTRA_MESSAGES),
+                )
+            }.getOrDefault(emptyList()).mapNotNull { message ->
+                val messageText = message.text?.toString()?.trim().orEmpty()
+                if (messageText.isEmpty()) null else {
+                    val sender = message.sender?.toString()?.trim().orEmpty()
+                    if (sender.isEmpty()) messageText else "$sender\n$messageText"
+                }
             }
+        } else {
+            emptyList()
         }
         val expanded = when {
             bigText.isNotEmpty() -> bigText
@@ -51,7 +55,7 @@ internal object NotificationContentExtractor {
             put("expandedContent", expanded)
             put("postedAt", sbn.postTime)
             put("category", notification.category ?: JSONObject.NULL)
-            put("channelId", if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) notification.channelId else JSONObject.NULL)
+            put("channelId", notification.channelId)
             put("group", notification.group ?: JSONObject.NULL)
             put("isOngoing", sbn.isOngoing)
             put("isClearable", sbn.isClearable)
@@ -62,7 +66,7 @@ internal object NotificationContentExtractor {
             notificationKey = sbn.key,
             packageName = sbn.packageName,
             appName = appName,
-            title = title.ifBlank { appName },
+            title = title,
             text = text,
             expandedContent = expanded,
             rawPayload = rawPayload,

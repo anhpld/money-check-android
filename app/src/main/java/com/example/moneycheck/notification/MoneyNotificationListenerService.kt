@@ -16,12 +16,16 @@ class MoneyNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
-        if (sbn.packageName !in AppSettings.get(this).enabledPackages()) return
+        if (sbn.packageName == packageName) return
         val captured = NotificationContentExtractor.extract(this, sbn) ?: return
 
         serviceScope.launch {
             val id = MoneyCheckRepository.get(this@MoneyNotificationListenerService).capture(captured)
-            if (id > 0) {
+            if (id > 0 && AppSettings.get(this@MoneyNotificationListenerService).shouldAutoAnalyze(
+                    packageName = sbn.packageName,
+                    notificationTitle = captured.title,
+                )
+            ) {
                 NotificationAnalysisScheduler.enqueue(this@MoneyNotificationListenerService, id)
             }
         }

@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import com.example.moneycheck.data.MoneyCheckRepository
 import com.example.moneycheck.notification.AppVisibility
 import com.example.moneycheck.notification.ConfirmationNotifier
+import com.example.moneycheck.notification.OverlayConfirmationLauncher
 import com.example.moneycheck.settings.AppSettings
 import java.io.IOException
 
@@ -28,10 +29,24 @@ class AnalyzeNotificationWorker(
 
         repository.markProcessing(notificationId)
         return try {
-            val draft = OpenAiClient().analyze(notification, apiKey, settings.model())
+            val draft = OpenAiClient().analyze(
+                notification = notification,
+                apiKey = apiKey,
+                model = settings.model(),
+                prompt = settings.prompt(),
+            )
             repository.saveAnalysis(notificationId, draft)
-            if (draft.isTransaction && !AppVisibility.isForeground) {
-                ConfirmationNotifier.show(applicationContext, notificationId, draft.amount)
+            if (!AppVisibility.isForeground) {
+                ConfirmationNotifier.show(
+                    applicationContext,
+                    notificationId,
+                    draft.direction,
+                    draft.amount,
+                    draft.purpose,
+                )
+                if (settings.overlayEnabled()) {
+                    OverlayConfirmationLauncher.show(applicationContext, notificationId)
+                }
             }
             Result.success()
         } catch (error: Exception) {

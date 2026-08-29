@@ -21,6 +21,7 @@ data class CapturedNotificationEntity(
     val rawPayload: String,
     val postedAt: Long,
     val capturedAt: Long = System.currentTimeMillis(),
+    val isSaved: Boolean = false,
     val analysisStatus: String = AnalysisStatus.PENDING,
     val handled: Boolean = false,
     val errorMessage: String? = null,
@@ -28,15 +29,10 @@ data class CapturedNotificationEntity(
 
 data class ExtractedDraftEntity(
     val notificationId: Long,
-    val isTransaction: Boolean,
     val direction: String,
     val amount: Long?,
-    val currency: String,
-    val purpose: String?,
-    val sender: String?,
-    val recipient: String?,
-    val reference: String?,
-    val confidence: Double,
+    val purpose: String,
+    val recipient: String,
     val rawModelJson: String,
     val analyzedAt: Long = System.currentTimeMillis(),
 )
@@ -46,12 +42,11 @@ data class TransactionEntity(
     val sourceNotificationId: Long?,
     val direction: String,
     val amount: Long,
-    val currency: String,
-    val purpose: String,
-    val sender: String,
     val recipient: String,
-    val reference: String,
+    val purpose: String,
+    val appName: String,
     val transactionTime: Long,
+    val llmInputJson: String,
     val confirmedAt: Long = System.currentTimeMillis(),
 )
 

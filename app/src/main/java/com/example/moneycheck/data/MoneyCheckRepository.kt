@@ -9,21 +9,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 class MoneyCheckRepository private constructor(context: Context) {
     private val helper = MoneyCheckOpenHelper(context.applicationContext)
     private val lock = Any()
     private val _notifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
+    private val _inboxNotifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
+    private val _savedNotifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
     private val _transactions = MutableStateFlow<List<TransactionEntity>>(emptyList())
 
     val notifications = _notifications.asStateFlow()
+    val inboxNotifications = _inboxNotifications.asStateFlow()
+    val savedNotifications = _savedNotifications.asStateFlow()
     val transactions = _transactions.asStateFlow()
 
     init {
-        synchronized(lock) { refreshAll() }
+        synchronized(lock) {
+            backfillMissingTransactionTraces()
+            purgeExpiredInbox()
+            refreshAll()
+        }
     }
 
     suspend fun capture(notification: CapturedNotificationEntity): Long = io {
+        purgeExpiredInbox()
         val id = helper.writableDatabase.insertWithOnConflict(
             "captured_notifications",
             null,
@@ -36,6 +46,21 @@ class MoneyCheckRepository private constructor(context: Context) {
 
     suspend fun getNotification(id: Long): NotificationWithDraft? = io { loadNotification(id) }
 
+    suspend fun saveNotification(id: Long) = io {
+        helper.writableDatabase.update(
+            "captured_notifications",
+            ContentValues().apply { put("isSaved", 1) },
+            "id = ?",
+            arrayOf(id.toString()),
+        )
+        refreshNotifications()
+    }
+
+    suspend fun deleteNotification(id: Long) = io {
+        helper.writableDatabase.delete("captured_notifications", "id = ?", arrayOf(id.toString()))
+        refreshNotifications()
+    }
+
     suspend fun markProcessing(id: Long) = io {
         helper.writableDatabase.inTransaction {
             delete("extracted_drafts", "notificationId = ?", arrayOf(id.toString()))
@@ -47,12 +72,7 @@ class MoneyCheckRepository private constructor(context: Context) {
     suspend fun saveAnalysis(id: Long, draft: ExtractedDraftEntity) = io {
         helper.writableDatabase.inTransaction {
             insertWithOnConflict("extracted_drafts", null, draft.toValues(), SQLiteDatabase.CONFLICT_REPLACE)
-            updateState(
-                id,
-                if (draft.isTransaction) AnalysisStatus.READY else AnalysisStatus.IGNORED,
-                handled = !draft.isTransaction,
-                error = null,
-            )
+            updateState(id, AnalysisStatus.READY, handled = false, error = null)
         }
         refreshNotifications()
     }
@@ -76,11 +96,8 @@ class MoneyCheckRepository private constructor(context: Context) {
         notification: CapturedNotificationEntity,
         direction: String,
         amount: Long,
-        currency: String,
-        purpose: String,
-        sender: String,
         recipient: String,
-        reference: String,
+        purpose: String,
     ) = io {
         helper.writableDatabase.inTransaction {
             insertWithOnConflict(
@@ -90,12 +107,18 @@ class MoneyCheckRepository private constructor(context: Context) {
                     put("sourceNotificationId", notification.id)
                     put("direction", direction)
                     put("amount", amount)
-                    put("currency", currency)
-                    put("purpose", purpose)
-                    put("sender", sender)
                     put("recipient", recipient)
-                    put("reference", reference)
+                    put("purpose", purpose)
+                    put("appName", notification.appName)
                     put("transactionTime", notification.postedAt)
+                    put(
+                        "llmInputJson",
+                        JSONObject().apply {
+                            put("title", notification.title)
+                            put("text", notification.text)
+                            put("expanded_content", notification.expandedContent)
+                        }.toString(),
+                    )
                     put("confirmedAt", System.currentTimeMillis())
                 },
                 SQLiteDatabase.CONFLICT_REPLACE,
@@ -105,8 +128,13 @@ class MoneyCheckRepository private constructor(context: Context) {
         refreshAll()
     }
 
-    suspend fun clearNotifications() = io {
-        helper.writableDatabase.delete("captured_notifications", null, null)
+    suspend fun clearInbox() = io {
+        helper.writableDatabase.delete("captured_notifications", "isSaved = 0", null)
+        refreshNotifications()
+    }
+
+    suspend fun clearSavedNotifications() = io {
+        helper.writableDatabase.delete("captured_notifications", "isSaved = 1", null)
         refreshNotifications()
     }
 
@@ -125,9 +153,18 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 
     private fun refreshNotifications() {
-        val items = helper.readableDatabase.rawQuery(
-            "SELECT * FROM captured_notifications ORDER BY capturedAt DESC LIMIT 500",
-            null,
+        val cutoff = System.currentTimeMillis() - INBOX_RETENTION_MILLIS
+        _inboxNotifications.value = loadNotifications("isSaved = 0 AND capturedAt >= ?", arrayOf(cutoff.toString()))
+        _savedNotifications.value = loadNotifications("isSaved = 1", null)
+        _notifications.value = (_savedNotifications.value + _inboxNotifications.value)
+            .distinctBy { it.notification.id }
+            .sortedByDescending { it.notification.capturedAt }
+    }
+
+    private fun loadNotifications(where: String, args: Array<String>?): List<NotificationWithDraft> =
+        helper.readableDatabase.rawQuery(
+            "SELECT * FROM captured_notifications WHERE $where ORDER BY capturedAt DESC LIMIT 500",
+            args,
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
@@ -136,7 +173,47 @@ class MoneyCheckRepository private constructor(context: Context) {
                 }
             }
         }
-        _notifications.value = items
+
+    private fun purgeExpiredInbox() {
+        val cutoff = System.currentTimeMillis() - INBOX_RETENTION_MILLIS
+        helper.writableDatabase.delete(
+            "captured_notifications",
+            "isSaved = 0 AND capturedAt < ?",
+            arrayOf(cutoff.toString()),
+        )
+    }
+
+    private fun backfillMissingTransactionTraces() {
+        val database = helper.writableDatabase
+        val traces = database.rawQuery(
+            """
+            SELECT t.id, c.title, c.text, c.expandedContent
+            FROM transactions t
+            JOIN captured_notifications c ON c.id = t.sourceNotificationId
+            WHERE t.llmInputJson = ''
+            """.trimIndent(),
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        cursor.long("id") to JSONObject().apply {
+                            put("title", cursor.string("title"))
+                            put("text", cursor.string("text"))
+                            put("expanded_content", cursor.string("expandedContent"))
+                        }.toString(),
+                    )
+                }
+            }
+        }
+        traces.forEach { (transactionId, inputJson) ->
+            database.update(
+                "transactions",
+                ContentValues().apply { put("llmInputJson", inputJson) },
+                "id = ?",
+                arrayOf(transactionId.toString()),
+            )
+        }
     }
 
     private fun refreshTransactions() {
@@ -176,6 +253,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         put("rawPayload", rawPayload)
         put("postedAt", postedAt)
         put("capturedAt", capturedAt)
+        put("isSaved", if (isSaved) 1 else 0)
         put("analysisStatus", analysisStatus)
         put("handled", if (handled) 1 else 0)
         put("errorMessage", errorMessage)
@@ -183,15 +261,10 @@ class MoneyCheckRepository private constructor(context: Context) {
 
     private fun ExtractedDraftEntity.toValues() = ContentValues().apply {
         put("notificationId", notificationId)
-        put("isTransaction", if (isTransaction) 1 else 0)
         put("direction", direction)
         if (amount == null) putNull("amount") else put("amount", amount)
-        put("currency", currency)
         put("purpose", purpose)
-        put("sender", sender)
         put("recipient", recipient)
-        put("reference", reference)
-        put("confidence", confidence)
         put("rawModelJson", rawModelJson)
         put("analyzedAt", analyzedAt)
     }
@@ -221,6 +294,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         rawPayload = string("rawPayload"),
         postedAt = long("postedAt"),
         capturedAt = long("capturedAt"),
+        isSaved = int("isSaved") == 1,
         analysisStatus = string("analysisStatus"),
         handled = int("handled") == 1,
         errorMessage = nullableString("errorMessage"),
@@ -228,15 +302,10 @@ class MoneyCheckRepository private constructor(context: Context) {
 
     private fun Cursor.toDraft() = ExtractedDraftEntity(
         notificationId = long("notificationId"),
-        isTransaction = int("isTransaction") == 1,
         direction = string("direction"),
         amount = if (isNull(column("amount"))) null else long("amount"),
-        currency = string("currency"),
-        purpose = nullableString("purpose"),
-        sender = nullableString("sender"),
-        recipient = nullableString("recipient"),
-        reference = nullableString("reference"),
-        confidence = getDouble(column("confidence")),
+        purpose = string("purpose"),
+        recipient = string("recipient"),
         rawModelJson = string("rawModelJson"),
         analyzedAt = long("analyzedAt"),
     )
@@ -246,12 +315,11 @@ class MoneyCheckRepository private constructor(context: Context) {
         sourceNotificationId = if (isNull(column("sourceNotificationId"))) null else long("sourceNotificationId"),
         direction = string("direction"),
         amount = long("amount"),
-        currency = string("currency"),
-        purpose = string("purpose"),
-        sender = string("sender"),
         recipient = string("recipient"),
-        reference = string("reference"),
+        purpose = string("purpose"),
+        appName = string("appName"),
         transactionTime = long("transactionTime"),
+        llmInputJson = string("llmInputJson"),
         confirmedAt = long("confirmedAt"),
     )
 
@@ -262,6 +330,8 @@ class MoneyCheckRepository private constructor(context: Context) {
     private fun Cursor.int(name: String) = getInt(column(name))
 
     companion object {
+        const val INBOX_RETENTION_MILLIS = 24L * 60L * 60L * 1_000L
+
         @Volatile private var instance: MoneyCheckRepository? = null
 
         fun get(context: Context): MoneyCheckRepository = instance ?: synchronized(this) {
@@ -270,7 +340,7 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 }
 
-private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, "money-check.db", null, 1) {
+private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, "money-check.db", null, 5) {
     override fun onConfigure(database: SQLiteDatabase) {
         super.onConfigure(database)
         database.setForeignKeyConstraintsEnabled(true)
@@ -291,6 +361,7 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
                 rawPayload TEXT NOT NULL,
                 postedAt INTEGER NOT NULL,
                 capturedAt INTEGER NOT NULL,
+                isSaved INTEGER NOT NULL DEFAULT 0,
                 analysisStatus TEXT NOT NULL,
                 handled INTEGER NOT NULL,
                 errorMessage TEXT
@@ -301,15 +372,10 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
             """
             CREATE TABLE extracted_drafts (
                 notificationId INTEGER PRIMARY KEY,
-                isTransaction INTEGER NOT NULL,
                 direction TEXT NOT NULL,
                 amount INTEGER,
-                currency TEXT NOT NULL,
-                purpose TEXT,
-                sender TEXT,
-                recipient TEXT,
-                reference TEXT,
-                confidence REAL NOT NULL,
+                purpose TEXT NOT NULL,
+                recipient TEXT NOT NULL,
                 rawModelJson TEXT NOT NULL,
                 analyzedAt INTEGER NOT NULL,
                 FOREIGN KEY(notificationId) REFERENCES captured_notifications(id) ON DELETE CASCADE
@@ -323,19 +389,110 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
                 sourceNotificationId INTEGER UNIQUE,
                 direction TEXT NOT NULL,
                 amount INTEGER NOT NULL,
-                currency TEXT NOT NULL,
-                purpose TEXT NOT NULL,
-                sender TEXT NOT NULL,
                 recipient TEXT NOT NULL,
-                reference TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                appName TEXT NOT NULL,
                 transactionTime INTEGER NOT NULL,
+                llmInputJson TEXT NOT NULL,
                 confirmedAt INTEGER NOT NULL
             )
             """.trimIndent(),
         )
     }
 
-    override fun onUpgrade(database: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(database: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            database.execSQL(
+                """
+                CREATE TABLE extracted_drafts_new (
+                    notificationId INTEGER PRIMARY KEY,
+                    direction TEXT NOT NULL,
+                    amount INTEGER,
+                    purpose TEXT NOT NULL,
+                    recipient TEXT NOT NULL,
+                    rawModelJson TEXT NOT NULL,
+                    analyzedAt INTEGER NOT NULL,
+                    FOREIGN KEY(notificationId) REFERENCES captured_notifications(id) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                INSERT INTO extracted_drafts_new (notificationId, direction, amount, purpose, recipient, rawModelJson, analyzedAt)
+                SELECT notificationId, direction, amount, COALESCE(purpose, ''), COALESCE(recipient, ''), rawModelJson, analyzedAt FROM extracted_drafts
+                """.trimIndent(),
+            )
+            database.execSQL("DROP TABLE extracted_drafts")
+            database.execSQL("ALTER TABLE extracted_drafts_new RENAME TO extracted_drafts")
+
+            database.execSQL(
+                """
+                CREATE TABLE transactions_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sourceNotificationId INTEGER UNIQUE,
+                    direction TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    recipient TEXT NOT NULL,
+                    purpose TEXT NOT NULL,
+                    appName TEXT NOT NULL,
+                    transactionTime INTEGER NOT NULL,
+                    confirmedAt INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                INSERT INTO transactions_new (
+                    id, sourceNotificationId, direction, amount, recipient, purpose, appName, transactionTime, confirmedAt
+                )
+                SELECT
+                    t.id,
+                    t.sourceNotificationId,
+                    t.direction,
+                    t.amount,
+                    t.recipient,
+                    t.purpose,
+                    COALESCE((SELECT c.appName FROM captured_notifications c WHERE c.id = t.sourceNotificationId), ''),
+                    t.transactionTime,
+                    t.confirmedAt
+                FROM transactions t
+                """.trimIndent(),
+            )
+            database.execSQL("DROP TABLE transactions")
+            database.execSQL("ALTER TABLE transactions_new RENAME TO transactions")
+        }
+        if (oldVersion == 2) {
+            database.execSQL(
+                """
+                CREATE TABLE extracted_drafts_v3 (
+                    notificationId INTEGER PRIMARY KEY,
+                    direction TEXT NOT NULL,
+                    amount INTEGER,
+                    purpose TEXT NOT NULL,
+                    recipient TEXT NOT NULL,
+                    rawModelJson TEXT NOT NULL,
+                    analyzedAt INTEGER NOT NULL,
+                    FOREIGN KEY(notificationId) REFERENCES captured_notifications(id) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                INSERT INTO extracted_drafts_v3 (notificationId, direction, amount, purpose, recipient, rawModelJson, analyzedAt)
+                SELECT notificationId, direction, amount, purpose, '', rawModelJson, analyzedAt FROM extracted_drafts
+                """.trimIndent(),
+            )
+            database.execSQL("DROP TABLE extracted_drafts")
+            database.execSQL("ALTER TABLE extracted_drafts_v3 RENAME TO extracted_drafts")
+        }
+        if (oldVersion < 4) {
+            // Preserve notifications from older app versions. New notifications are temporary by default.
+            database.execSQL("ALTER TABLE captured_notifications ADD COLUMN isSaved INTEGER NOT NULL DEFAULT 1")
+        }
+        if (oldVersion < 5) {
+            database.execSQL("ALTER TABLE transactions ADD COLUMN llmInputJson TEXT NOT NULL DEFAULT ''")
+        }
+    }
 }
 
 private inline fun <T> SQLiteDatabase.inTransaction(block: SQLiteDatabase.() -> T): T {

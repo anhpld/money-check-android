@@ -1,7 +1,10 @@
 package com.example.moneycheck
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -11,8 +14,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.moneycheck.notification.AppVisibility
+import com.example.moneycheck.notification.ConfirmationNotifier
 import com.example.moneycheck.ui.MoneyCheckApp
 import com.example.moneycheck.ui.theme.MoneyCheckTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,31 +25,36 @@ import kotlinx.coroutines.flow.MutableStateFlow
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val hasListenerAccess = MutableStateFlow(false)
+    private val canPostConfirmations = MutableStateFlow(false)
+    private val canDrawOverlays = MutableStateFlow(false)
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) {}
+    ) { refreshNotificationState() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        ConfirmationNotifier.ensureChannel(this)
         handleIntent(intent)
         setContent {
             val listenerAccess = hasListenerAccess.collectAsStateWithLifecycle()
+            val postConfirmationAccess = canPostConfirmations.collectAsStateWithLifecycle()
+            val overlayAccess = canDrawOverlays.collectAsStateWithLifecycle()
             MoneyCheckTheme {
                 MoneyCheckApp(
                     viewModel = viewModel,
                     hasNotificationAccess = listenerAccess.value,
+                    canPostConfirmations = postConfirmationAccess.value,
+                    canDrawOverlays = overlayAccess.value,
                     onOpenNotificationAccess = {
                         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                     },
-                    onRequestPostNotifications = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    },
+                    onRequestPostNotifications = ::requestOrOpenNotificationSettings,
+                    onRequestOverlayPermission = ::openOverlayPermissionSettings,
                 )
             }
         }
+        requestPostNotificationsOnce()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -61,6 +71,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         hasListenerAccess.value = packageName in NotificationManagerCompat.getEnabledListenerPackages(this)
+        refreshNotificationState()
+        canDrawOverlays.value = Settings.canDrawOverlays(this)
         viewModel.refreshSettings()
     }
 
@@ -74,7 +86,48 @@ class MainActivity : ComponentActivity() {
         if (id > 0) viewModel.requestConfirmation(id)
     }
 
+    private fun requestPostNotificationsOnce() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        ) return
+        val preferences = getSharedPreferences(PERMISSION_PREFS, Context.MODE_PRIVATE)
+        if (preferences.getBoolean(KEY_POST_NOTIFICATION_REQUESTED, false)) return
+        preferences.edit().putBoolean(KEY_POST_NOTIFICATION_REQUESTED, true).apply()
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    private fun requestOrOpenNotificationSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !getSharedPreferences(PERMISSION_PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_POST_NOTIFICATION_REQUESTED, false)
+        ) {
+            requestPostNotificationsOnce()
+            return
+        }
+        startActivity(
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            },
+        )
+    }
+
+    private fun refreshNotificationState() {
+        canPostConfirmations.value = ConfirmationNotifier.canNotify(this)
+    }
+
+    private fun openOverlayPermissionSettings() {
+        startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName"),
+            ),
+        )
+    }
+
     companion object {
         const val EXTRA_CONFIRM_NOTIFICATION_ID = "confirm_notification_id"
+        private const val PERMISSION_PREFS = "permission_requests"
+        private const val KEY_POST_NOTIFICATION_REQUESTED = "post_notifications_requested"
     }
 }
