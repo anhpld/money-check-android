@@ -1,12 +1,14 @@
 package com.example.moneycheck
 
 import android.app.Application
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.moneycheck.data.CapturedNotificationEntity
 import com.example.moneycheck.data.MoneyCheckRepository
 import com.example.moneycheck.llm.NotificationAnalysisScheduler
 import com.example.moneycheck.llm.OpenAiModelsClient
+import com.example.moneycheck.notification.ConfirmationNotifier
 import com.example.moneycheck.settings.AppSettings
 import com.example.moneycheck.settings.InstalledApp
 import com.example.moneycheck.settings.loadLaunchableApps
@@ -77,12 +79,86 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testNotification(notificationId: Long) {
-        _confirmationId.value = notificationId
-        NotificationAnalysisScheduler.enqueue(getApplication(), notificationId)
+        viewModelScope.launch {
+            val notification = withContext(Dispatchers.IO) {
+                repository.getNotification(notificationId)?.notification
+            }
+            if (notification == null) {
+                showToast("Không tìm thấy notification đã lưu")
+                return@launch
+            }
+
+            val configuredTitles = appSettings.notificationRules()[notification.packageName]
+            if (configuredTitles == null) {
+                showToast("Ứng dụng chưa được cấu hình tự động phân tích")
+                return@launch
+            }
+            if (!appSettings.shouldAutoAnalyze(notification.packageName, notification.title)) {
+                showToast("Title notification chưa được cấu hình cho ứng dụng này")
+                return@launch
+            }
+
+            val testRunId = withContext(Dispatchers.IO) {
+                repository.createTestRun(notificationId)
+            }
+            if (testRunId == null) {
+                showToast("Không thể tạo lần test mới")
+                return@launch
+            }
+            NotificationAnalysisScheduler.enqueue(getApplication(), testRunId)
+        }
     }
 
     fun saveNotification(notificationId: Long) {
         viewModelScope.launch(Dispatchers.IO) { repository.saveNotification(notificationId) }
+    }
+
+    fun addNotificationConfig(notificationId: Long) {
+        viewModelScope.launch {
+            val notification = withContext(Dispatchers.IO) {
+                repository.getNotification(notificationId)?.notification
+            }
+            if (notification == null) {
+                showToast("Không tìm thấy notification")
+                return@launch
+            }
+
+            val packageName = notification.packageName
+            val title = notification.title.trim()
+            val rules = appSettings.notificationRules()
+            val configuredTitles = rules[packageName]
+
+            when {
+                configuredTitles == null -> {
+                    appSettings.saveNotificationRules(
+                        rules + (packageName to title.takeIf(String::isNotEmpty)?.let(::setOf).orEmpty()),
+                    )
+                    _settings.value = appSettings.snapshot()
+                    showToast(
+                        if (title.isEmpty()) "Đã thêm app, áp dụng cho mọi title"
+                        else "Đã thêm app và title vào cấu hình",
+                    )
+                }
+
+                configuredTitles.isEmpty() -> showToast("Đã có cấu hình cho app này")
+
+                title.isEmpty() -> {
+                    appSettings.saveNotificationRules(rules + (packageName to emptySet()))
+                    _settings.value = appSettings.snapshot()
+                    showToast("Đã cập nhật app, áp dụng cho mọi title")
+                }
+
+                configuredTitles.any { it.trim().equals(title, ignoreCase = true) } -> {
+                    showToast("Đã có cấu hình app và title này")
+                }
+
+                else -> {
+                    appSettings.saveNotificationRules(rules + (packageName to (configuredTitles + title)))
+                    _settings.value = appSettings.snapshot()
+                    showToast("Đã thêm title vào cấu hình hiện có")
+                }
+            }
+        }
     }
 
     fun deleteNotification(notificationId: Long) {
@@ -94,6 +170,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.IO) { repository.markHandled(notificationId) }
             _confirmationId.value = null
             onComplete()
+        }
+    }
+
+    fun cancelPendingConfirmation(notificationId: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.cancelPendingConfirmation(notificationId) }
+            ConfirmationNotifier.cancel(getApplication(), notificationId)
+            if (_confirmationId.value == notificationId) _confirmationId.value = null
+            showToast("Đã hủy giao dịch")
         }
     }
 
@@ -116,6 +201,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             _confirmationId.value = null
+            showToast("Đã lưu giao dịch thành công")
             onComplete()
         }
     }
@@ -204,6 +290,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshSettings() {
         _settings.value = appSettings.snapshot()
+    }
+
+    private fun showToast(message: String) {
+        Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
     }
 
     private fun String.sha256(): String = MessageDigest.getInstance("SHA-256")

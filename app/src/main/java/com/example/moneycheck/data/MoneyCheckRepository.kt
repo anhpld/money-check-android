@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.util.UUID
 
 class MoneyCheckRepository private constructor(context: Context) {
     private val helper = MoneyCheckOpenHelper(context.applicationContext)
@@ -46,6 +47,33 @@ class MoneyCheckRepository private constructor(context: Context) {
 
     suspend fun getNotification(id: Long): NotificationWithDraft? = io { loadNotification(id) }
 
+    /** Creates a fresh temporary row so a saved sample remains immutable and reusable. */
+    suspend fun createTestRun(savedNotificationId: Long): Long? = io {
+        val sample = loadNotification(savedNotificationId)?.notification
+            ?.takeIf { it.isSaved }
+            ?: return@io null
+        val now = System.currentTimeMillis()
+        val runToken = UUID.randomUUID().toString()
+        val run = sample.copy(
+            id = 0,
+            eventId = "test:$runToken",
+            notificationKey = "test:${sample.notificationKey}:$runToken",
+            postedAt = now,
+            capturedAt = now,
+            isSaved = false,
+            analysisStatus = AnalysisStatus.PENDING,
+            handled = false,
+            errorMessage = null,
+        )
+        val id = helper.writableDatabase.insertOrThrow(
+            "captured_notifications",
+            null,
+            run.toValues(),
+        )
+        refreshNotifications()
+        id
+    }
+
     suspend fun saveNotification(id: Long) = io {
         helper.writableDatabase.update(
             "captured_notifications",
@@ -57,7 +85,17 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 
     suspend fun deleteNotification(id: Long) = io {
-        helper.writableDatabase.delete("captured_notifications", "id = ?", arrayOf(id.toString()))
+        val notification = loadNotification(id)?.notification
+        if (notification?.isSaved == true && notification.analysisStatus == AnalysisStatus.READY) {
+            helper.writableDatabase.update(
+                "captured_notifications",
+                ContentValues().apply { put("isSaved", 0) },
+                "id = ?",
+                arrayOf(id.toString()),
+            )
+        } else {
+            helper.writableDatabase.delete("captured_notifications", "id = ?", arrayOf(id.toString()))
+        }
         refreshNotifications()
     }
 
@@ -92,6 +130,14 @@ class MoneyCheckRepository private constructor(context: Context) {
         refreshNotifications()
     }
 
+    suspend fun cancelPendingConfirmation(id: Long) = io {
+        helper.writableDatabase.inTransaction {
+            delete("extracted_drafts", "notificationId = ?", arrayOf(id.toString()))
+            updateState(id, AnalysisStatus.IGNORED, handled = true, error = null)
+        }
+        refreshNotifications()
+    }
+
     suspend fun confirm(
         notification: CapturedNotificationEntity,
         direction: String,
@@ -100,7 +146,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         purpose: String,
     ) = io {
         helper.writableDatabase.inTransaction {
-            insertWithOnConflict(
+            insertOrThrow(
                 "transactions",
                 null,
                 ContentValues().apply {
@@ -110,6 +156,7 @@ class MoneyCheckRepository private constructor(context: Context) {
                     put("recipient", recipient)
                     put("purpose", purpose)
                     put("appName", notification.appName)
+                    put("packageName", notification.packageName)
                     put("transactionTime", notification.postedAt)
                     put(
                         "llmInputJson",
@@ -121,7 +168,6 @@ class MoneyCheckRepository private constructor(context: Context) {
                     )
                     put("confirmedAt", System.currentTimeMillis())
                 },
-                SQLiteDatabase.CONFLICT_REPLACE,
             )
             updateState(notification.id, AnalysisStatus.CONFIRMED, handled = true, error = null)
         }
@@ -129,12 +175,24 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 
     suspend fun clearInbox() = io {
-        helper.writableDatabase.delete("captured_notifications", "isSaved = 0", null)
+        helper.writableDatabase.delete(
+            "captured_notifications",
+            "isSaved = 0 AND analysisStatus != ?",
+            arrayOf(AnalysisStatus.READY),
+        )
         refreshNotifications()
     }
 
     suspend fun clearSavedNotifications() = io {
-        helper.writableDatabase.delete("captured_notifications", "isSaved = 1", null)
+        helper.writableDatabase.inTransaction {
+            update(
+                "captured_notifications",
+                ContentValues().apply { put("isSaved", 0) },
+                "isSaved = 1 AND analysisStatus = ?",
+                arrayOf(AnalysisStatus.READY),
+            )
+            delete("captured_notifications", "isSaved = 1", null)
+        }
         refreshNotifications()
     }
 
@@ -156,7 +214,11 @@ class MoneyCheckRepository private constructor(context: Context) {
         val cutoff = System.currentTimeMillis() - INBOX_RETENTION_MILLIS
         _inboxNotifications.value = loadNotifications("isSaved = 0 AND capturedAt >= ?", arrayOf(cutoff.toString()))
         _savedNotifications.value = loadNotifications("isSaved = 1", null)
-        _notifications.value = (_savedNotifications.value + _inboxNotifications.value)
+        val pendingConfirmations = loadNotifications(
+            "analysisStatus = ?",
+            arrayOf(AnalysisStatus.READY),
+        )
+        _notifications.value = (_savedNotifications.value + _inboxNotifications.value + pendingConfirmations)
             .distinctBy { it.notification.id }
             .sortedByDescending { it.notification.capturedAt }
     }
@@ -178,8 +240,8 @@ class MoneyCheckRepository private constructor(context: Context) {
         val cutoff = System.currentTimeMillis() - INBOX_RETENTION_MILLIS
         helper.writableDatabase.delete(
             "captured_notifications",
-            "isSaved = 0 AND capturedAt < ?",
-            arrayOf(cutoff.toString()),
+            "isSaved = 0 AND capturedAt < ? AND analysisStatus != ?",
+            arrayOf(cutoff.toString(), AnalysisStatus.READY),
         )
     }
 
@@ -214,6 +276,16 @@ class MoneyCheckRepository private constructor(context: Context) {
                 arrayOf(transactionId.toString()),
             )
         }
+        database.execSQL(
+            """
+            UPDATE transactions
+            SET packageName = COALESCE(
+                (SELECT c.packageName FROM captured_notifications c WHERE c.id = transactions.sourceNotificationId),
+                ''
+            )
+            WHERE packageName = ''
+            """.trimIndent(),
+        )
     }
 
     private fun refreshTransactions() {
@@ -318,6 +390,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         recipient = string("recipient"),
         purpose = string("purpose"),
         appName = string("appName"),
+        packageName = string("packageName"),
         transactionTime = long("transactionTime"),
         llmInputJson = string("llmInputJson"),
         confirmedAt = long("confirmedAt"),
@@ -340,7 +413,7 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 }
 
-private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, "money-check.db", null, 5) {
+private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, "money-check.db", null, 7) {
     override fun onConfigure(database: SQLiteDatabase) {
         super.onConfigure(database)
         database.setForeignKeyConstraintsEnabled(true)
@@ -386,12 +459,13 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
             """
             CREATE TABLE transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sourceNotificationId INTEGER UNIQUE,
+                sourceNotificationId INTEGER,
                 direction TEXT NOT NULL,
                 amount INTEGER NOT NULL,
                 recipient TEXT NOT NULL,
                 purpose TEXT NOT NULL,
                 appName TEXT NOT NULL,
+                packageName TEXT NOT NULL,
                 transactionTime INTEGER NOT NULL,
                 llmInputJson TEXT NOT NULL,
                 confirmedAt INTEGER NOT NULL
@@ -491,6 +565,42 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
         }
         if (oldVersion < 5) {
             database.execSQL("ALTER TABLE transactions ADD COLUMN llmInputJson TEXT NOT NULL DEFAULT ''")
+        }
+        if (oldVersion < 6) {
+            database.execSQL("ALTER TABLE transactions ADD COLUMN packageName TEXT NOT NULL DEFAULT ''")
+        }
+        if (oldVersion < 7) {
+            database.execSQL(
+                """
+                CREATE TABLE transactions_v7 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sourceNotificationId INTEGER,
+                    direction TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    recipient TEXT NOT NULL,
+                    purpose TEXT NOT NULL,
+                    appName TEXT NOT NULL,
+                    packageName TEXT NOT NULL,
+                    transactionTime INTEGER NOT NULL,
+                    llmInputJson TEXT NOT NULL,
+                    confirmedAt INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                INSERT INTO transactions_v7 (
+                    id, sourceNotificationId, direction, amount, recipient, purpose,
+                    appName, packageName, transactionTime, llmInputJson, confirmedAt
+                )
+                SELECT
+                    id, sourceNotificationId, direction, amount, recipient, purpose,
+                    appName, packageName, transactionTime, llmInputJson, confirmedAt
+                FROM transactions
+                """.trimIndent(),
+            )
+            database.execSQL("DROP TABLE transactions")
+            database.execSQL("ALTER TABLE transactions_v7 RENAME TO transactions")
         }
     }
 }

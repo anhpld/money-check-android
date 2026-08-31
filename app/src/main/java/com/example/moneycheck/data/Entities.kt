@@ -45,6 +45,7 @@ data class TransactionEntity(
     val recipient: String,
     val purpose: String,
     val appName: String,
+    val packageName: String,
     val transactionTime: Long,
     val llmInputJson: String,
     val confirmedAt: Long = System.currentTimeMillis(),

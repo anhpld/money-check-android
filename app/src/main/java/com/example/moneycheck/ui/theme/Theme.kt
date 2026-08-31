@@ -33,10 +33,10 @@ private val LightColorScheme = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = MoneyGreenContainer,
     onPrimaryContainer = Color(0xFF00382F),
-    secondary = MoneyNavy,
+    secondary = Color(0xFF14534C),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDCE8EC),
-    onSecondaryContainer = Color(0xFF152A33),
+    secondaryContainer = Color(0xFFE7F1EF),
+    onSecondaryContainer = Color(0xFF14534C),
     tertiary = MoneyGold,
     background = LightBackground,
     onBackground = LightOnSurface,
@@ -45,8 +45,8 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightOnSurfaceVariant,
     outline = LightOutline,
-    error = Color(0xFFBA1A1A),
-    errorContainer = Color(0xFFFFDAD6),
+    error = Color(0xFFC94F52),
+    errorContainer = Color(0xFFFCE8E8),
 )
 
 private val MoneyShapes = Shapes(
