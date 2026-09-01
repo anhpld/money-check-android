@@ -1,4 +1,6 @@
 <resources>
     <string name="app_name">Money check</string>
     <string name="notification_listener_label">Đọc thông báo giao dịch</string>
+    <string name="screen_capture_service_label">Đọc màn hình giao dịch</string>
+    <string name="screen_capture_service_description">Đọc nội dung màn hình của ứng dụng được chọn khi bạn chủ động nhấn nút nổi Lưu thủ công.</string>
 </resources>

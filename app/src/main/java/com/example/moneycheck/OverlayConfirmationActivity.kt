@@ -49,13 +49,14 @@ class OverlayConfirmationActivity : ComponentActivity() {
                         onDismiss = {
                             viewModel.dismissConfirmation(item.notification.id) { finish() }
                         },
-                        onConfirm = { direction, amount, recipient, purpose ->
+                        onConfirm = { direction, amount, recipient, purpose, transactionTime ->
                             viewModel.confirmTransaction(
                                 notification = item.notification,
                                 direction = direction,
                                 amount = amount,
                                 recipient = recipient,
                                 purpose = purpose,
+                                transactionTime = transactionTime,
                                 onComplete = { finish() },
                             )
                         },

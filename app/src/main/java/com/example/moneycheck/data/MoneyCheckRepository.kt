@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -138,13 +139,27 @@ class MoneyCheckRepository private constructor(context: Context) {
         refreshNotifications()
     }
 
+    suspend fun cancelPendingConfirmations(ids: Collection<Long>) = io {
+        if (ids.isEmpty()) return@io
+        helper.writableDatabase.inTransaction {
+            ids.distinct().forEach { id ->
+                delete("extracted_drafts", "notificationId = ?", arrayOf(id.toString()))
+                updateState(id, AnalysisStatus.IGNORED, handled = true, error = null)
+            }
+        }
+        refreshNotifications()
+    }
+
     suspend fun confirm(
         notification: CapturedNotificationEntity,
         direction: String,
         amount: Long,
         recipient: String,
         purpose: String,
+        transactionTime: Long,
     ) = io {
+        val draft = loadDraft(notification.id)
+        val isManualScreen = ScreenCaptureSessionStore.isManualScreenEvent(notification.eventId)
         helper.writableDatabase.inTransaction {
             insertOrThrow(
                 "transactions",
@@ -157,14 +172,21 @@ class MoneyCheckRepository private constructor(context: Context) {
                     put("purpose", purpose)
                     put("appName", notification.appName)
                     put("packageName", notification.packageName)
-                    put("transactionTime", notification.postedAt)
+                    put("sourceType", if (isManualScreen) TransactionSource.MANUAL else TransactionSource.AUTOMATIC)
+                    put("transactionTime", transactionTime)
                     put(
                         "llmInputJson",
-                        JSONObject().apply {
-                            put("title", notification.title)
-                            put("text", notification.text)
-                            put("expanded_content", notification.expandedContent)
-                        }.toString(),
+                        if (isManualScreen) {
+                            JSONObject(notification.rawPayload).apply {
+                                put("model_output", draft?.rawModelJson.orEmpty())
+                            }.toString()
+                        } else {
+                            JSONObject().apply {
+                                put("title", notification.title)
+                                put("text", notification.text)
+                                put("expanded_content", notification.expandedContent)
+                            }.toString()
+                        },
                     )
                     put("confirmedAt", System.currentTimeMillis())
                 },
@@ -201,6 +223,62 @@ class MoneyCheckRepository private constructor(context: Context) {
         refreshTransactions()
     }
 
+    suspend fun addManualTransaction(
+        appName: String,
+        packageName: String,
+        direction: String,
+        amount: Long,
+        recipient: String,
+        purpose: String,
+        transactionTime: Long,
+    ) = io {
+        helper.writableDatabase.insertOrThrow(
+            "transactions",
+            null,
+            ContentValues().apply {
+                putNull("sourceNotificationId")
+                put("direction", direction)
+                put("amount", amount)
+                put("recipient", recipient)
+                put("purpose", purpose)
+                put("appName", appName)
+                put("packageName", packageName)
+                put("sourceType", TransactionSource.MANUAL)
+                put("transactionTime", transactionTime)
+                put("llmInputJson", "")
+                put("confirmedAt", System.currentTimeMillis())
+            },
+        )
+        refreshTransactions()
+    }
+
+    suspend fun updateTransaction(
+        id: Long,
+        appName: String,
+        packageName: String,
+        direction: String,
+        amount: Long,
+        recipient: String,
+        purpose: String,
+        transactionTime: Long,
+    ) = io {
+        helper.writableDatabase.update(
+            "transactions",
+            ContentValues().apply {
+                put("appName", appName)
+                put("packageName", packageName)
+                put("direction", direction)
+                put("amount", amount)
+                put("recipient", recipient)
+                put("purpose", purpose)
+                put("transactionTime", transactionTime)
+            },
+            "id = ?",
+            arrayOf(id.toString()),
+        )
+        refreshTransactions()
+    }
+
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) {
         synchronized(lock) { block() }
     }
@@ -212,7 +290,10 @@ class MoneyCheckRepository private constructor(context: Context) {
 
     private fun refreshNotifications() {
         val cutoff = System.currentTimeMillis() - INBOX_RETENTION_MILLIS
-        _inboxNotifications.value = loadNotifications("isSaved = 0 AND capturedAt >= ?", arrayOf(cutoff.toString()))
+        _inboxNotifications.value = loadNotifications(
+            "isSaved = 0 AND capturedAt >= ? AND eventId NOT LIKE ?",
+            arrayOf(cutoff.toString(), "${ScreenCaptureSessionStore.EVENT_PREFIX}%"),
+        )
         _savedNotifications.value = loadNotifications("isSaved = 1", null)
         val pendingConfirmations = loadNotifications(
             "analysisStatus = ?",
@@ -337,6 +418,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         if (amount == null) putNull("amount") else put("amount", amount)
         put("purpose", purpose)
         put("recipient", recipient)
+        if (transactionTime == null) putNull("transactionTime") else put("transactionTime", transactionTime)
         put("rawModelJson", rawModelJson)
         put("analyzedAt", analyzedAt)
     }
@@ -378,6 +460,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         amount = if (isNull(column("amount"))) null else long("amount"),
         purpose = string("purpose"),
         recipient = string("recipient"),
+        transactionTime = if (isNull(column("transactionTime"))) null else long("transactionTime"),
         rawModelJson = string("rawModelJson"),
         analyzedAt = long("analyzedAt"),
     )
@@ -391,6 +474,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         purpose = string("purpose"),
         appName = string("appName"),
         packageName = string("packageName"),
+        sourceType = string("sourceType"),
         transactionTime = long("transactionTime"),
         llmInputJson = string("llmInputJson"),
         confirmedAt = long("confirmedAt"),
@@ -413,7 +497,7 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 }
 
-private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, "money-check.db", null, 7) {
+private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, "money-check.db", null, 9) {
     override fun onConfigure(database: SQLiteDatabase) {
         super.onConfigure(database)
         database.setForeignKeyConstraintsEnabled(true)
@@ -449,6 +533,7 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
                 amount INTEGER,
                 purpose TEXT NOT NULL,
                 recipient TEXT NOT NULL,
+                transactionTime INTEGER,
                 rawModelJson TEXT NOT NULL,
                 analyzedAt INTEGER NOT NULL,
                 FOREIGN KEY(notificationId) REFERENCES captured_notifications(id) ON DELETE CASCADE
@@ -466,6 +551,7 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
                 purpose TEXT NOT NULL,
                 appName TEXT NOT NULL,
                 packageName TEXT NOT NULL,
+                sourceType TEXT NOT NULL,
                 transactionTime INTEGER NOT NULL,
                 llmInputJson TEXT NOT NULL,
                 confirmedAt INTEGER NOT NULL
@@ -601,6 +687,14 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
             )
             database.execSQL("DROP TABLE transactions")
             database.execSQL("ALTER TABLE transactions_v7 RENAME TO transactions")
+        }
+        if (oldVersion < 8) {
+            database.execSQL(
+                "ALTER TABLE transactions ADD COLUMN sourceType TEXT NOT NULL DEFAULT '${TransactionSource.AUTOMATIC}'",
+            )
+        }
+        if (oldVersion < 9) {
+            database.execSQL("ALTER TABLE extracted_drafts ADD COLUMN transactionTime INTEGER")
         }
     }
 }

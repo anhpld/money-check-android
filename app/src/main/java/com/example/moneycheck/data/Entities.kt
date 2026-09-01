@@ -9,6 +9,11 @@ object AnalysisStatus {
     const val ERROR = "error"
 }
 
+object TransactionSource {
+    const val MANUAL = "manual"
+    const val AUTOMATIC = "automatic"
+}
+
 data class CapturedNotificationEntity(
     val id: Long = 0,
     val eventId: String,
@@ -33,6 +38,7 @@ data class ExtractedDraftEntity(
     val amount: Long?,
     val purpose: String,
     val recipient: String,
+    val transactionTime: Long? = null,
     val rawModelJson: String,
     val analyzedAt: Long = System.currentTimeMillis(),
 )
@@ -46,6 +52,7 @@ data class TransactionEntity(
     val purpose: String,
     val appName: String,
     val packageName: String,
+    val sourceType: String,
     val transactionTime: Long,
     val llmInputJson: String,
     val confirmedAt: Long = System.currentTimeMillis(),

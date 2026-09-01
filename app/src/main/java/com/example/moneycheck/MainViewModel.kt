@@ -182,12 +182,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun cancelAllPendingConfirmations(notificationIds: List<Long>) {
+        val ids = notificationIds.distinct()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.cancelPendingConfirmations(ids) }
+            ids.forEach { id -> ConfirmationNotifier.cancel(getApplication(), id) }
+            if (_confirmationId.value in ids) _confirmationId.value = null
+            showToast("Đã hủy ${ids.size} giao dịch đang chờ")
+        }
+    }
+
     fun confirmTransaction(
         notification: CapturedNotificationEntity,
         direction: String,
         amount: Long,
         recipient: String,
         purpose: String,
+        transactionTime: Long,
         onComplete: () -> Unit = {},
     ) {
         viewModelScope.launch {
@@ -198,6 +210,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     amount,
                     recipient,
                     purpose,
+                    transactionTime,
                 )
             }
             _confirmationId.value = null
@@ -286,6 +299,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteTransaction(id: Long) {
         viewModelScope.launch(Dispatchers.IO) { repository.deleteTransaction(id) }
+    }
+
+    fun addManualTransaction(
+        appName: String,
+        packageName: String,
+        direction: String,
+        amount: Long,
+        recipient: String,
+        purpose: String,
+        transactionTime: Long,
+        onComplete: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.addManualTransaction(
+                    appName,
+                    packageName,
+                    direction,
+                    amount,
+                    recipient,
+                    purpose,
+                    transactionTime,
+                )
+            }
+            showToast("Đã thêm giao dịch")
+            onComplete()
+        }
+    }
+
+    fun updateTransaction(
+        id: Long,
+        appName: String,
+        packageName: String,
+        direction: String,
+        amount: Long,
+        recipient: String,
+        purpose: String,
+        transactionTime: Long,
+        onComplete: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.updateTransaction(
+                    id,
+                    appName,
+                    packageName,
+                    direction,
+                    amount,
+                    recipient,
+                    purpose,
+                    transactionTime,
+                )
+            }
+            showToast("Đã cập nhật giao dịch")
+            onComplete()
+        }
     }
 
     fun refreshSettings() {
