@@ -20,6 +20,8 @@ import androidx.activity.viewModels
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.example.moneycheck.data.MoneyCheckRepository
 import com.example.moneycheck.notification.AppVisibility
 import com.example.moneycheck.notification.ConfirmationNotifier
 import com.example.moneycheck.accessibility.ScreenTransactionCaptureService
@@ -28,6 +30,8 @@ import com.example.moneycheck.settings.AppSettings
 import com.example.moneycheck.ui.MoneyCheckApp
 import com.example.moneycheck.ui.theme.MoneyCheckTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -38,6 +42,24 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { refreshNotificationState() }
+    private val databaseExportLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.sqlite3"),
+    ) { destination ->
+        if (destination == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val result = runCatching {
+                contentResolver.openOutputStream(destination, "wt").use { output ->
+                    checkNotNull(output) { "Không thể mở file đã chọn" }
+                    MoneyCheckRepository.get(this@MainActivity).exportDatabase(output)
+                }
+            }
+            Toast.makeText(
+                this@MainActivity,
+                if (result.isSuccess) "Đã xuất database" else "Không thể xuất database: ${result.exceptionOrNull()?.message.orEmpty()}",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +87,9 @@ class MainActivity : ComponentActivity() {
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
                     onStartScreenRead = ::startManualScreenRead,
+                    onExportDatabase = {
+                        databaseExportLauncher.launch("moneycheck-${LocalDate.now()}.db")
+                    },
                 )
             }
         }

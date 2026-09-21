@@ -57,8 +57,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDateRangePickerState
@@ -66,8 +64,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
@@ -77,7 +74,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Schedule
@@ -129,6 +125,7 @@ import java.util.Locale
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private enum class MainTab(
     val label: String,
@@ -144,6 +141,7 @@ private enum class MainTab(
 
 private val IncomeStrong = Color(0xFF087A55)
 private val AppIconCache = object : LruCache<String, ImageBitmap>(64) {}
+private val KnownScreenPromptPackages = listOf("com.shopee.vn", "vn.com.vng.zalopay")
 
 @Composable
 fun MoneyCheckApp(
@@ -157,6 +155,7 @@ fun MoneyCheckApp(
     onRequestOverlayPermission: () -> Unit,
     onOpenScreenCaptureAccess: () -> Unit,
     onStartScreenRead: () -> Unit,
+    onExportDatabase: () -> Unit,
 ) {
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val inboxNotifications by viewModel.inboxNotifications.collectAsStateWithLifecycle()
@@ -227,7 +226,6 @@ fun MoneyCheckApp(
                 onDelete = viewModel::deleteTransaction,
                 onAdd = viewModel::addManualTransaction,
                 onUpdate = viewModel::updateTransaction,
-                onOpenInbox = { selectedTab = MainTab.INBOX },
                 onStartScreenRead = onStartScreenRead,
                 modifier = Modifier.padding(innerPadding),
             )
@@ -275,6 +273,7 @@ fun MoneyCheckApp(
                 onEnsureModelsLoaded = viewModel::ensureOpenAiModelsLoaded,
                 onSave = viewModel::saveSettings,
                 onClearApiKey = viewModel::clearApiKey,
+                onExportDatabase = onExportDatabase,
                 modifier = Modifier.padding(innerPadding),
             )
         }
@@ -338,7 +337,6 @@ private fun TransactionScreen(
     onDelete: (Long) -> Unit,
     onAdd: (String, String, String, Long, String, String, Long, () -> Unit) -> Unit,
     onUpdate: (Long, String, String, String, Long, String, String, Long, () -> Unit) -> Unit,
-    onOpenInbox: () -> Unit,
     onStartScreenRead: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -355,6 +353,12 @@ private fun TransactionScreen(
                     requireNotNull(filterStartEpochDay)..requireNotNull(filterEndEpochDay)
             }
         }
+    }
+    val groupedTransactions = remember(filteredTransactions) {
+        filteredTransactions
+            .groupBy { it.transactionTime.toLocalDate() }
+            .toList()
+            .sortedByDescending { it.first }
     }
     val income = filteredTransactions.filter { it.direction == "income" }.sumOf { it.amount }
     val expense = filteredTransactions.filter { it.direction == "expense" }.sumOf { it.amount }
@@ -379,28 +383,16 @@ private fun TransactionScreen(
                     modifier = Modifier.weight(1f),
                     eyebrowPill = false,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(
-                        modifier = Modifier.size(44.dp),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                    ) {
-                        IconButton(onClick = {
-                            transactionToEdit = null
-                            showAddMethodPicker = true
-                        }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Thêm giao dịch", tint = MaterialTheme.colorScheme.onPrimary)
-                        }
-                    }
-                    Surface(
-                        modifier = Modifier.size(44.dp),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    ) {
-                        IconButton(onClick = onOpenInbox) {
-                            Icon(Icons.Outlined.Notifications, contentDescription = "Mở hộp thư")
-                        }
+                Surface(
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    IconButton(onClick = {
+                        transactionToEdit = null
+                        showAddMethodPicker = true
+                    }) {
+                        Icon(Icons.Filled.Add, contentDescription = "Thêm giao dịch", tint = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
             }
@@ -414,23 +406,23 @@ private fun TransactionScreen(
             )
         }
         item {
-            DateFilterCard(
-                startEpochDay = filterStartEpochDay,
-                endEpochDay = filterEndEpochDay,
-                resultCount = filteredTransactions.size,
-                onOpen = { showDateFilter = true },
-                onClear = {
-                    filterStartEpochDay = null
-                    filterEndEpochDay = null
-                },
-            )
-        }
-        item {
-            SectionHeader(
-                title = "Giao dịch gần đây",
-                trailing = "${filteredTransactions.size} giao dịch",
-                subtitle = if (filterStartEpochDay == null) "Các khoản đã được xác nhận" else "Trong khoảng ngày đã chọn",
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeader(
+                    title = "Giao dịch gần đây",
+                    trailing = "${filteredTransactions.size} giao dịch",
+                    subtitle = if (filterStartEpochDay == null) "Các khoản đã được xác nhận" else "Trong khoảng ngày đã chọn",
+                )
+                DateFilterCard(
+                    startEpochDay = filterStartEpochDay,
+                    endEpochDay = filterEndEpochDay,
+                    resultCount = filteredTransactions.size,
+                    onOpen = { showDateFilter = true },
+                    onClear = {
+                        filterStartEpochDay = null
+                        filterEndEpochDay = null
+                    },
+                )
+            }
         }
         if (filteredTransactions.isEmpty()) {
             item {
@@ -445,15 +437,20 @@ private fun TransactionScreen(
                 )
             }
         } else {
-            items(filteredTransactions, key = TransactionEntity::id) { transaction ->
-                TransactionCard(
-                    transaction = transaction,
-                    onEdit = {
-                        transactionToEdit = transaction
-                        showTransactionEditor = true
-                    },
-                    onDelete = { transactionToDelete = transaction },
-                )
+            groupedTransactions.forEach { (date, dayTransactions) ->
+                item(key = "day:${date.toEpochDay()}") {
+                    TransactionDayHeader(date = date, transactions = dayTransactions)
+                }
+                items(dayTransactions, key = TransactionEntity::id) { transaction ->
+                    TransactionCard(
+                        transaction = transaction,
+                        onEdit = {
+                            transactionToEdit = transaction
+                            showTransactionEditor = true
+                        },
+                        onDelete = { transactionToDelete = transaction },
+                    )
+                }
             }
         }
     }
@@ -536,9 +533,9 @@ private fun ManualAddMethodDialog(
                     shape = MaterialTheme.shapes.medium,
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Tự điền thủ công", style = MaterialTheme.typography.titleMedium)
+                        Text("Nhập thủ công", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Tự chọn ứng dụng và nhập đầy đủ thông tin giao dịch.",
+                            "Chọn ứng dụng và tự nhập thông tin giao dịch.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -552,7 +549,7 @@ private fun ManualAddMethodDialog(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Đọc từ màn hình", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Hiện nút nổi, tự nhận diện app đang mở và để OpenAI điền giúp.",
+                            "Tự nhận diện ứng dụng và điền thông tin từ nội dung đang mở.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -591,6 +588,8 @@ private fun ScreenReadSetupSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
         containerColor = MaterialTheme.colorScheme.surface,
+        sheetGesturesEnabled = false,
+        dragHandle = null,
     ) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.92f).imePadding()) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) {
@@ -717,39 +716,48 @@ private fun ScreenReadSetupSheet(
 private fun BalanceHero(net: Long, income: Long, expense: Long, periodLabel: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.primary)
-                .padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Dòng tiền ròng", color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.labelLarge)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "Dòng tiền ròng",
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                     Text(
                         formatMoney(net),
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Surface(color = Color.White.copy(alpha = 0.14f), shape = CircleShape) {
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.10f),
+                    shape = CircleShape,
+                ) {
                     Text(
                         periodLabel,
                         Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                HeroMetric("↓", "Tiền vào", income, Modifier.weight(1f), Color(0xFF9BE4C8))
-                HeroMetric("↑", "Tiền ra", expense, Modifier.weight(1f), Color(0xFFFFB4AB))
+            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.18f))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                HeroMetric("↓", "Tiền vào", income, Modifier.weight(1f), MaterialTheme.colorScheme.primary)
+                HeroMetric("↑", "Tiền ra", expense, Modifier.weight(1f), MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -757,15 +765,24 @@ private fun BalanceHero(net: Long, income: Long, expense: Long, periodLabel: Str
 
 @Composable
 private fun HeroMetric(symbol: String, label: String, value: Long, modifier: Modifier, accent: Color) {
-    Surface(modifier = modifier, color = Color.White.copy(alpha = 0.10f), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(symbol, color = accent, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(5.dp))
-                Text(label, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelMedium)
-            }
-            Text(formatMoney(value), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(symbol, color = accent, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(5.dp))
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.labelMedium,
+            )
         }
+        Text(
+            formatMoney(value),
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -787,6 +804,63 @@ private fun SectionHeader(title: String, trailing: String? = null, subtitle: Str
 }
 
 @Composable
+private fun TransactionDayHeader(date: LocalDate, transactions: List<TransactionEntity>) {
+    val income = transactions.filter { it.direction == "income" }.sumOf { it.amount }
+    val expense = transactions.filter { it.direction == "expense" }.sumOf { it.amount }
+    val net = income - expense
+    val netColor = when {
+        net > 0 -> IncomeStrong
+        net < 0 -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(10.dp),
+        ) {
+            Icon(
+                Icons.Outlined.DateRange,
+                contentDescription = null,
+                modifier = Modifier.padding(8.dp).size(18.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                formatTransactionDayTitle(date),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                "${formatEpochDay(date.toEpochDay())} · ${transactions.size} giao dịch",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Surface(
+            color = netColor.copy(alpha = 0.12f),
+            shape = CircleShape,
+        ) {
+            Text(
+                formatSignedMoney(net),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                color = netColor,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
 private fun TransactionCard(
     transaction: TransactionEntity,
     onEdit: () -> Unit,
@@ -794,6 +868,7 @@ private fun TransactionCard(
 ) {
     val income = transaction.direction == "income"
     val accent = if (income) IncomeStrong else MaterialTheme.colorScheme.error
+    var menuExpanded by remember { mutableStateOf(false) }
     var showLlmInput by rememberSaveable(transaction.id) { mutableStateOf(false) }
     val llmInput = remember(transaction.llmInputJson) { parseLlmInput(transaction.llmInputJson) }
     Card(
@@ -801,104 +876,125 @@ private fun TransactionCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(18.dp),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                AppAvatar(transaction.appName, transaction.packageName, size = 44)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.Top) {
-                        Text(
-                            transaction.purpose.ifBlank { "Không có nội dung" },
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                Icons.Outlined.Edit,
-                                contentDescription = "Sửa giao dịch",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                Icons.Outlined.Delete,
-                                contentDescription = "Xóa giao dịch",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${transaction.appName}  ·  ${formatDateTime(transaction.transactionTime)}",
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            color = if (transaction.sourceType == TransactionSource.MANUAL) {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            },
-                            shape = CircleShape,
-                        ) {
-                            Text(
-                                if (transaction.sourceType == TransactionSource.MANUAL) "Thủ công" else "Tự động",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            AppAvatar(transaction.appName, transaction.packageName, size = 42)
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(
+                    transaction.purpose.ifBlank { "Không có nội dung" },
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        (if (income) "+" else "−") + formatMoney(transaction.amount),
-                        color = accent,
-                        style = MaterialTheme.typography.titleLarge,
+                        "${transaction.appName} · ${formatTransactionDateTime(transaction.transactionTime)}",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    Spacer(Modifier.width(6.dp))
+                    Surface(
+                        color = if (transaction.sourceType == TransactionSource.MANUAL) {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        },
+                        shape = CircleShape,
+                    ) {
+                        Text(
+                            if (transaction.sourceType == TransactionSource.MANUAL) "Thủ công" else "Tự động",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Người nhận: ${transaction.recipient.ifBlank { transaction.appName }}",
+                        transaction.recipient.ifBlank { transaction.appName },
+                        modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        (if (income) "+" else "−") + formatMoney(transaction.amount),
+                        color = accent,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
                 }
             }
-            if (llmInput != null) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable {
-                        showLlmInput = !showLlmInput
-                    },
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = MaterialTheme.shapes.small,
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.size(36.dp),
                 ) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Code, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (showLlmInput) "Ẩn chi tiết LLM" else "Chi tiết LLM",
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Icon(
-                            if (showLlmInput) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = "Tùy chọn giao dịch",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Sửa giao dịch") },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit()
+                        },
+                    )
+                    if (llmInput != null) {
+                        DropdownMenuItem(
+                            text = { Text("Dữ liệu trích xuất") },
+                            leadingIcon = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                showLlmInput = true
+                            },
                         )
                     }
-                }
-                if (showLlmInput) {
-                    LlmInputDetails(llmInput)
+                    DropdownMenuItem(
+                        text = { Text("Xóa giao dịch", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Outlined.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        },
+                    )
                 }
             }
+        }
+    }
+
+    if (showLlmInput) {
+        llmInput?.let { input ->
+            LlmInputDialog(
+                input = input,
+                onDismiss = { showLlmInput = false },
+            )
         }
     }
 }
@@ -912,44 +1008,119 @@ private fun DateFilterCard(
     onClear: () -> Unit,
 ) {
     val active = startEpochDay != null && endEpochDay != null
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onOpen),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
-                Icon(
-                    Icons.Outlined.DateRange,
-                    contentDescription = null,
-                    modifier = Modifier.padding(9.dp).size(20.dp),
-                    tint = MaterialTheme.colorScheme.secondary,
-                )
-            }
-            Spacer(Modifier.width(11.dp))
+            Icon(
+                Icons.Outlined.DateRange,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
-                Text("Khoảng ngày", style = MaterialTheme.typography.titleSmall)
                 Text(
                     if (active) {
-                        "${formatEpochDay(requireNotNull(startEpochDay))} – ${formatEpochDay(requireNotNull(endEpochDay))} · $resultCount mục"
+                        "${formatEpochDay(requireNotNull(startEpochDay))} – ${formatEpochDay(requireNotNull(endEpochDay))}"
                     } else {
-                        "Tất cả giao dịch · tối đa 3 tháng mỗi lần lọc"
+                        "Tất cả thời gian"
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                if (active) {
+                    Text(
+                        "$resultCount giao dịch",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (active) {
                 TextButton(onClick = onClear, contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Text("Bỏ lọc")
                 }
             }
-            OutlinedButton(onClick = onOpen, contentPadding = PaddingValues(horizontal = 12.dp)) {
-                Text(if (active) "Đổi" else "Chọn")
+            Text(
+                if (active) "Đổi" else "Lọc",
+                modifier = Modifier.padding(horizontal = 8.dp),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactListAction(
+    title: String,
+    description: String,
+    actionLabel: String,
+    danger: Boolean,
+    onClick: () -> Unit,
+) {
+    val actionColor = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val containerColor = if (danger) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.38f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        color = containerColor,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, actionColor.copy(alpha = 0.32f)),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Outlined.Delete,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = actionColor,
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                actionLabel,
+                color = actionColor,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -993,10 +1164,26 @@ private fun TransactionDateRangeDialog(
                 modifier = Modifier.weight(1f),
                 title = {
                     Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp)) {
-                        Text("Lọc theo khoảng ngày", style = MaterialTheme.typography.titleLarge)
+                        Text("Chọn khoảng ngày", style = MaterialTheme.typography.titleLarge)
                         Text("Khoảng tối đa 3 tháng", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
+                headline = {
+                    val start = state.selectedStartDateMillis?.floorDiv(MILLIS_PER_DAY)
+                    val end = state.selectedEndDateMillis?.floorDiv(MILLIS_PER_DAY)
+                    Text(
+                        when {
+                            start != null && end != null -> "${formatEpochDay(start)} – ${formatEpochDay(end)}"
+                            start != null -> "${formatEpochDay(start)} – Chọn ngày kết thúc"
+                            else -> "Ngày bắt đầu – Ngày kết thúc"
+                        },
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                showModeToggle = false,
             )
             errorMessage?.let {
                 Text(
@@ -1050,6 +1237,8 @@ private fun TransactionEditorSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
         containerColor = MaterialTheme.colorScheme.surface,
+        sheetGesturesEnabled = false,
+        dragHandle = null,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f).imePadding(),
@@ -1261,35 +1450,32 @@ private fun PendingConfirmationScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 28.dp),
+        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             PageHeader(
-                eyebrow = "Đang chờ bạn",
-                title = "Các giao dịch cần xác nhận",
-                subtitle = "Giao dịch chưa lưu sẽ ở đây cho đến khi bạn xác nhận hoặc hủy.",
+                eyebrow = "Moneycheck",
+                title = "Cần xác nhận",
+                subtitle = "Kiểm tra các giao dịch đã phân tích trước khi lưu vào Tổng quan.",
+                eyebrowPill = false,
             )
         }
         item {
-            SectionHeader(
-                title = "Chờ xử lý",
-                trailing = "${notifications.size} giao dịch",
-            )
-        }
-        if (notifications.isNotEmpty()) {
-            item {
-                OutlinedButton(
-                    onClick = { showCancelAllConfirmation = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                ) {
-                    Icon(Icons.Outlined.Delete, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Hủy tất cả (${notifications.size})")
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeader(
+                    title = "Chờ xử lý",
+                    trailing = "${notifications.size} giao dịch",
+                    subtitle = "Soát lại số tiền, người nhận và nội dung",
+                )
+                if (notifications.isNotEmpty()) {
+                    CompactListAction(
+                        title = "Hủy toàn bộ hàng chờ",
+                        description = "Xóa ${notifications.size} kết quả phân tích chưa lưu",
+                        actionLabel = "Hủy tất cả",
+                        danger = true,
+                        onClick = { showCancelAllConfirmation = true },
+                    )
                 }
             }
         }
@@ -1347,57 +1533,97 @@ private fun PendingConfirmationCard(
 ) {
     val draft = requireNotNull(item.draft)
     val income = draft.direction == "income"
-    val amountColor = if (income) IncomeStrong else MaterialTheme.colorScheme.error
+    val expense = draft.direction == "expense"
+    val amountColor = when {
+        income -> IncomeStrong
+        expense -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val directionLabel = when (draft.direction) {
         "income" -> "Tiền vào"
         "expense" -> "Tiền ra"
         else -> "Chưa rõ chiều giao dịch"
     }
+    val amountPrefix = when {
+        income -> "+"
+        expense -> "−"
+        else -> ""
+    }
+    val transactionTime = draft.transactionTime ?: item.notification.postedAt
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(18.dp),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppAvatar(item.notification.appName, item.notification.packageName, size = 44)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(item.notification.appName, style = MaterialTheme.typography.titleSmall)
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                AppAvatar(item.notification.appName, item.notification.packageName, size = 42)
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
-                        formatDateTime(item.notification.postedAt),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        draft.purpose.ifBlank { "Chưa xác định mục đích" },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${item.notification.appName} · ${formatTransactionDateTime(transactionTime)}",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            color = when {
+                                income -> MaterialTheme.colorScheme.primaryContainer
+                                expense -> MaterialTheme.colorScheme.errorContainer
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            },
+                            shape = CircleShape,
+                        ) {
+                            Text(
+                                directionLabel,
+                                Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = amountColor,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            draft.recipient.ifBlank { "Chưa xác định người nhận" },
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            draft.amount?.let { amountPrefix + formatMoney(it) } ?: "Chưa rõ",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = amountColor,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                    }
                 }
-                Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
-                    Text(
-                        directionLabel,
-                        Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = amountColor,
-                    )
-                }
-            }
-            Text(
-                draft.amount?.let(::formatMoney) ?: "Chưa xác định số tiền",
-                style = MaterialTheme.typography.headlineSmall,
-                color = amountColor,
-                fontWeight = FontWeight.Bold,
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(draft.purpose.ifBlank { "Chưa xác định mục đích" }, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Người nhận: ${draft.recipient.ifBlank { "Chưa xác định" }}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = onCancel,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
                     Text("Hủy")
                 }
                 Button(onClick = onReview, modifier = Modifier.weight(1f)) {
@@ -1429,14 +1655,15 @@ private fun NotificationInboxScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 28.dp),
+        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             PageHeader(
-                eyebrow = "Tạm thời · 24 giờ",
-                title = "Hộp thư notification",
-                subtitle = "Hứng notification từ mọi ứng dụng. Chỉ mục bạn bấm Lưu mới được giữ lâu dài.",
+                eyebrow = "Moneycheck",
+                title = "Hộp thư",
+                subtitle = "Notification mới nhận được giữ tạm trong 24 giờ.",
+                eyebrowPill = false,
             )
         }
         if (!hasNotificationAccess) item { PermissionBanner(onOpenNotificationAccess) }
@@ -1453,19 +1680,21 @@ private fun NotificationInboxScreen(
             )
         }
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Mới nhận", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape) {
-                    Text(
-                        if (normalizedQuery.isBlank()) "${notifications.size} mục"
-                        else "${filteredNotifications.size}/${notifications.size} mục",
-                        Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeader(
+                    title = "Mới nhận",
+                    trailing = if (normalizedQuery.isBlank()) "${notifications.size} mục"
+                    else "${filteredNotifications.size}/${notifications.size} mục",
+                    subtitle = "Lưu các mẫu cần giữ lại hoặc thêm app vào cấu hình",
+                )
                 if (notifications.isNotEmpty()) {
-                    Spacer(Modifier.width(4.dp))
-                    TextButton(onClick = onClear) { Text("Xóa tất cả") }
+                    CompactListAction(
+                        title = "Dọn hộp thư tạm",
+                        description = "Xóa các notification đang hiển thị trong Hộp thư",
+                        actionLabel = "Xóa",
+                        danger = true,
+                        onClick = onClear,
+                    )
                 }
             }
         }
@@ -1508,25 +1737,32 @@ private fun SavedNotificationScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 28.dp),
+        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             PageHeader(
-                eyebrow = "Thư viện test",
-                title = "Notification đã lưu",
-                subtitle = "Các mẫu được giữ trên máy để bạn chạy lại phân tích khi cần.",
+                eyebrow = "Moneycheck",
+                title = "Đã lưu",
+                subtitle = "Các mẫu notification được giữ lại để test phân tích.",
+                eyebrowPill = false,
             )
         }
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Đã lưu", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape) {
-                    Text("${notifications.size} mục", Modifier.padding(horizontal = 11.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeader(
+                    title = "Thư viện mẫu",
+                    trailing = "${notifications.size} mục",
+                    subtitle = "Chạy lại mẫu đã lưu để kiểm tra prompt và parser",
+                )
                 if (notifications.isNotEmpty()) {
-                    Spacer(Modifier.width(4.dp))
-                    TextButton(onClick = { showClearConfirmation = true }) { Text("Xóa tất cả") }
+                    CompactListAction(
+                        title = "Xóa toàn bộ mẫu",
+                        description = "Dọn các notification đã lưu khỏi thư viện test",
+                        actionLabel = "Xóa tất cả",
+                        danger = true,
+                        onClick = { showClearConfirmation = true },
+                    )
                 }
             }
         }
@@ -1589,33 +1825,100 @@ private fun NotificationCard(
     showStatus: Boolean = true,
 ) {
     var showRaw by rememberSaveable(item.notification.id) { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
     val notification = item.notification
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(18.dp),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppAvatar(notification.appName, notification.packageName)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(notification.appName, style = MaterialTheme.typography.titleSmall)
-                    Text(notification.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                AppAvatar(notification.appName, notification.packageName, size = 42)
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(
+                        notification.title.ifBlank { "Thông báo không có tiêu đề" },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${notification.appName} · ${formatDateTime(notification.postedAt)}",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (showStatus) {
+                            Spacer(Modifier.width(6.dp))
+                            StatusLabel(if (temporary) "temporary" else notification.analysisStatus)
+                        }
+                    }
+                    Text(
+                        notification.expandedContent.ifBlank { notification.text }.ifBlank { "(Không có nội dung)" },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = if (showRaw) Int.MAX_VALUE else 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                if (showStatus) {
-                    StatusLabel(if (temporary) "temporary" else notification.analysisStatus)
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "Tùy chọn notification",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (showRaw) "Thu gọn chi tiết" else "Xem chi tiết") },
+                            leadingIcon = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                            onClick = {
+                                showRaw = !showRaw
+                                menuExpanded = false
+                            },
+                        )
+                        if (onAddConfig != null) {
+                            DropdownMenuItem(
+                                text = { Text("Thêm cấu hình") },
+                                leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onAddConfig()
+                                },
+                            )
+                        }
+                        if (onDelete != null) {
+                            DropdownMenuItem(
+                                text = { Text("Xóa notification", color = MaterialTheme.colorScheme.error) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Outlined.Delete,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDelete()
+                                },
+                            )
+                        }
+                    }
                 }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(notification.title.ifBlank { "Thông báo không có tiêu đề" }, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    notification.expandedContent.ifBlank { notification.text }.ifBlank { "(Không có nội dung)" },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (showRaw) Int.MAX_VALUE else 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
             if (showStatus) {
                 notification.errorMessage?.let { InlineMessage(it, error = true) }
@@ -1625,39 +1928,21 @@ private fun NotificationCard(
                     Text(notification.rawPayload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
                 }
             }
-            if (onAddConfig != null) {
-                OutlinedButton(
-                    onClick = onAddConfig,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Thêm app + title vào cấu hình")
-                }
-            }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    formatDateTime(notification.postedAt),
+                    notification.packageName,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Button(
-                    onClick = { showRaw = !showRaw },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                ) { Text(if (showRaw) "Thu gọn" else "Chi tiết") }
-                if (onDelete != null) {
-                    TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 10.dp)) {
-                        Text("Xóa", color = MaterialTheme.colorScheme.error)
-                    }
-                }
+                Spacer(Modifier.width(10.dp))
                 Button(
                     onClick = onAction,
                     enabled = actionEnabled,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 ) { Text(actionLabel) }
             }
         }
@@ -1736,8 +2021,9 @@ private fun SettingsScreen(
     onValidateApiKey: (String) -> Unit,
     onApiKeyChanged: () -> Unit,
     onEnsureModelsLoaded: () -> Unit,
-    onSave: (String, String, String, Map<String, Set<String>>, Boolean) -> Boolean,
+    onSave: (String, String, String, Map<String, Set<String>>, Map<String, String>, Boolean) -> Boolean,
     onClearApiKey: () -> Unit,
+    onExportDatabase: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var model by rememberSaveable { mutableStateOf(settings.model) }
@@ -1746,16 +2032,20 @@ private fun SettingsScreen(
     var notificationRuleInputs by remember {
         mutableStateOf(settings.notificationRules.mapValues { (_, titles) -> titles.sorted().joinToString("\n") })
     }
+    var screenPromptInputs by remember { mutableStateOf(settings.screenPrompts) }
     var overlayEnabled by rememberSaveable { mutableStateOf(settings.overlayEnabled) }
     var query by rememberSaveable { mutableStateOf("") }
+    var screenPromptQuery by rememberSaveable { mutableStateOf("") }
     var saved by rememberSaveable { mutableStateOf(false) }
     var modelMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var promptEditorTarget by remember { mutableStateOf<PromptEditorTarget?>(null) }
 
     LaunchedEffect(settings) {
         model = settings.model
         prompt = settings.prompt
         notificationRuleInputs = settings.notificationRules
             .mapValues { (_, titles) -> titles.sorted().joinToString("\n") }
+        screenPromptInputs = settings.screenPrompts
         overlayEnabled = settings.overlayEnabled
     }
     LaunchedEffect(Unit) { onEnsureModelsLoaded() }
@@ -1773,6 +2063,23 @@ private fun SettingsScreen(
                 (it.label.contains(normalizedQuery, true) || it.packageName.contains(normalizedQuery, true))
         }
     }
+    val normalizedScreenPromptQuery = screenPromptQuery.trim()
+    val installedAppByPackage = remember(installedApps) { installedApps.associateBy(InstalledApp::packageName) }
+    val screenPromptApps = remember(installedAppByPackage, screenPromptInputs) {
+        (KnownScreenPromptPackages + screenPromptInputs.keys)
+            .distinct()
+            .map { packageName -> installedAppByPackage[packageName] ?: knownScreenPromptApp(packageName) }
+    }
+    val screenPromptPackages = remember(screenPromptApps) { screenPromptApps.map(InstalledApp::packageName).toSet() }
+    val filteredScreenPromptApps = remember(installedApps, normalizedScreenPromptQuery, screenPromptPackages) {
+        if (normalizedScreenPromptQuery.isBlank()) emptyList() else installedApps
+            .filter { app ->
+                app.packageName !in screenPromptPackages &&
+                    (app.label.contains(normalizedScreenPromptQuery, true) ||
+                        app.packageName.contains(normalizedScreenPromptQuery, true))
+            }
+            .take(8)
+    }
     val canSave = model.isNotBlank() &&
         (settings.hasApiKey || apiKey.isNotBlank()) &&
         (apiKey.isBlank() || openAiConnection.isVerified)
@@ -1783,28 +2090,34 @@ private fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         stickyHeader {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Cài đặt", style = MaterialTheme.typography.titleLarge)
-                        Text("Cấu hình cách Moneycheck hoạt động", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                actions = {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    PageHeader(
+                        eyebrow = "Moneycheck",
+                        title = "Cài đặt",
+                        subtitle = "Quyền, OpenAI và các prompt phân tích",
+                        modifier = Modifier.weight(1f),
+                        eyebrowPill = false,
+                    )
+                    Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = {
                             val rules = notificationRuleInputs.mapValues { (_, input) ->
                                 input.lineSequence().map(String::trim).filter(String::isNotEmpty).toSet()
                             }
-                            saved = onSave(model, prompt, apiKey, rules, overlayEnabled)
+                            saved = onSave(model, prompt, apiKey, rules, screenPromptInputs, overlayEnabled)
                             if (saved) apiKey = ""
                         },
                         enabled = canSave,
-                        modifier = Modifier.padding(end = 12.dp),
+                        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp),
                     ) { Text("Lưu") }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-            )
+                }
+            }
         }
 
         if (saved) item { InlineMessage("Đã lưu cấu hình", modifier = Modifier.padding(horizontal = 18.dp)) }
@@ -1919,23 +2232,104 @@ private fun SettingsScreen(
                         }
                     }
                 }
+                PromptPreviewCard(
+                    title = "Prompt notification",
+                    subtitle = "Dùng cho notification tự động và mẫu trong Hộp thư/Đã lưu.",
+                    prompt = prompt,
+                    isCustom = prompt.trim() != AppSettings.DEFAULT_PROMPT.trim(),
+                    onEdit = {
+                        promptEditorTarget = PromptEditorTarget(
+                            title = "Prompt notification",
+                            subtitle = "Chỉ title, text và expanded_content được gửi đi.",
+                            prompt = prompt,
+                            defaultPrompt = AppSettings.DEFAULT_PROMPT,
+                        )
+                    },
+                    onReset = {
+                        prompt = AppSettings.DEFAULT_PROMPT
+                        saved = false
+                    },
+                )
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "Prompt đọc màn hình",
+                subtitle = "Prompt riêng theo app khi bấm nút nổi để phân tích màn chi tiết giao dịch.",
+                modifier = Modifier.padding(horizontal = 18.dp),
+            ) {
+                Text(
+                    "Moneycheck tự nhận diện package app đang mở, rồi dùng prompt tương ứng ở đây. Nếu chưa có prompt riêng, app sẽ dùng prompt mặc định.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it; saved = false },
+                    value = screenPromptQuery,
+                    onValueChange = { screenPromptQuery = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Prompt phân tích") },
-                    minLines = 5,
-                    maxLines = 10,
+                    label = { Text("Tìm app để thêm/sửa prompt") },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    singleLine = true,
                     shape = MaterialTheme.shapes.medium,
                 )
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Chỉ title, text và expanded_content được gửi đi.",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(
+                    "Gợi ý & đã cấu hình",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
+                screenPromptApps.forEach { app ->
+                    val defaultPrompt = AppSettings.defaultScreenPrompt(app.packageName)
+                    val currentPrompt = screenPromptInputs[app.packageName] ?: defaultPrompt
+                    ScreenPromptAppRow(
+                        app = app,
+                        prompt = currentPrompt,
+                        isCustom = currentPrompt.trim() != defaultPrompt.trim(),
+                        onEdit = {
+                            promptEditorTarget = PromptEditorTarget(
+                                packageName = app.packageName,
+                                title = "Prompt ${app.label}",
+                                subtitle = app.packageName,
+                                prompt = currentPrompt,
+                                defaultPrompt = defaultPrompt,
+                            )
+                        },
                     )
-                    TextButton(onClick = { prompt = AppSettings.DEFAULT_PROMPT; saved = false }) { Text("Mặc định") }
+                }
+                if (normalizedScreenPromptQuery.isNotBlank()) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        "Kết quả tìm kiếm",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (filteredScreenPromptApps.isEmpty()) {
+                        Text(
+                            "Không tìm thấy app phù hợp.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        filteredScreenPromptApps.forEach { app ->
+                            val defaultPrompt = AppSettings.defaultScreenPrompt(app.packageName)
+                            ScreenPromptAppRow(
+                                app = app,
+                                prompt = defaultPrompt,
+                                isCustom = false,
+                                onEdit = {
+                                    promptEditorTarget = PromptEditorTarget(
+                                        packageName = app.packageName,
+                                        title = "Prompt ${app.label}",
+                                        subtitle = app.packageName,
+                                        prompt = defaultPrompt,
+                                        defaultPrompt = defaultPrompt,
+                                    )
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -2004,6 +2398,246 @@ private fun SettingsScreen(
             )
         }
 
+        item {
+            SettingsSection(
+                title = "Dữ liệu",
+                subtitle = "Sao lưu database SQLite để mở bằng ứng dụng đọc SQLite hoặc lưu trữ ở nơi khác.",
+                modifier = Modifier.padding(horizontal = 18.dp),
+            ) {
+                Text(
+                    "File xuất ra chứa dữ liệu giao dịch và notification. API key cùng cấu hình ứng dụng không được đưa vào file.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    onClick = onExportDatabase,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Xuất file database (.db)")
+                }
+            }
+        }
+
+    }
+
+    promptEditorTarget?.let { target ->
+        PromptEditorSheet(
+            target = target,
+            onDismiss = { promptEditorTarget = null },
+            onApply = { updatedPrompt ->
+                val packageName = target.packageName
+                if (packageName == null) {
+                    prompt = updatedPrompt
+                } else {
+                    screenPromptInputs = screenPromptInputs + (packageName to updatedPrompt)
+                    screenPromptQuery = ""
+                }
+                saved = false
+                promptEditorTarget = null
+            },
+        )
+    }
+}
+
+private data class PromptEditorTarget(
+    val title: String,
+    val subtitle: String,
+    val prompt: String,
+    val defaultPrompt: String,
+    val packageName: String? = null,
+)
+
+private fun knownScreenPromptApp(packageName: String): InstalledApp = InstalledApp(
+    packageName = packageName,
+    label = when (packageName) {
+        "com.shopee.vn" -> "Shopee"
+        "vn.com.vng.zalopay" -> "ZaloPay"
+        else -> packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+    },
+)
+
+@Composable
+private fun PromptPreviewCard(
+    title: String,
+    subtitle: String,
+    prompt: String,
+    isCustom: Boolean,
+    onEdit: () -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(title, style = MaterialTheme.typography.titleSmall)
+                        PromptStatusChip(isCustom = isCustom)
+                    }
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onEdit) { Text("Sửa") }
+            }
+            Text(
+                prompt.lineSequence()
+                    .map(String::trim)
+                    .filter(String::isNotEmpty)
+                    .take(4)
+                    .joinToString(" "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onReset, enabled = isCustom) { Text("Mặc định") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScreenPromptAppRow(
+    app: InstalledApp,
+    prompt: String,
+    isCustom: Boolean,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AppAvatar(app.label, app.packageName, size = 38)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            app.label,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        PromptStatusChip(isCustom = isCustom)
+                    }
+                    Text(
+                        app.packageName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                TextButton(onClick = onEdit) { Text("Sửa") }
+            }
+            Text(
+                prompt.lineSequence()
+                    .map(String::trim)
+                    .filter(String::isNotEmpty)
+                    .take(3)
+                    .joinToString(" "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PromptStatusChip(isCustom: Boolean) {
+    Surface(
+        color = if (isCustom) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+        shape = CircleShape,
+    ) {
+        Text(
+            if (isCustom) "Đã chỉnh" else "Mặc định",
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isCustom) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+            maxLines = 1,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PromptEditorSheet(
+    target: PromptEditorTarget,
+    onDismiss: () -> Unit,
+    onApply: (String) -> Unit,
+) {
+    var draft by remember(target) { mutableStateOf(target.prompt) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        sheetGesturesEnabled = false,
+        dragHandle = null,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .imePadding(),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(target.title, style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    target.subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                label = { Text("Nội dung prompt") },
+                minLines = 12,
+                shape = MaterialTheme.shapes.medium,
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                    .navigationBarsPadding(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TextButton(onClick = { draft = target.defaultPrompt }) { Text("Mặc định") }
+                Spacer(Modifier.weight(1f))
+                OutlinedButton(onClick = onDismiss) { Text("Hủy") }
+                Button(
+                    onClick = { onApply(draft.trim()) },
+                    enabled = draft.isNotBlank(),
+                ) { Text("Áp dụng") }
+            }
+        }
     }
 }
 
@@ -2018,11 +2652,12 @@ private fun SettingsSection(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(22.dp),
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             content()
@@ -2038,8 +2673,16 @@ private fun PermissionRow(
     actionLabel: String,
     onAction: () -> Unit,
 ) {
-    Surface(color = Color.Transparent, shape = MaterialTheme.shapes.medium) {
-        Row(Modifier.padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Row(
+            Modifier.padding(start = 13.dp, top = 11.dp, bottom = 11.dp, end = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Surface(modifier = Modifier.size(10.dp), shape = CircleShape, color = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) {}
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -2049,8 +2692,8 @@ private fun PermissionRow(
             Button(
                 onClick = onAction,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
             ) { Text(actionLabel) }
@@ -2060,12 +2703,19 @@ private fun PermissionRow(
 
 @Composable
 private fun SettingToggleRow(title: String, description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Row(Modifier.padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -2240,13 +2890,8 @@ internal fun TransactionConfirmationDialog(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
         containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = {
-            Surface(
-                modifier = Modifier.padding(top = 10.dp).size(width = 42.dp, height = 5.dp),
-                color = MaterialTheme.colorScheme.outline,
-                shape = CircleShape,
-            ) {}
-        },
+        sheetGesturesEnabled = false,
+        dragHandle = null,
     ) {
         Column(
             modifier = Modifier
@@ -2475,9 +3120,9 @@ private fun LlmInputDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Chi tiết đầu vào LLM", style = MaterialTheme.typography.titleLarge)
+                        Text("Dữ liệu trích xuất", style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "Dữ liệu chính xác đã gửi để phân tích",
+                            "Nội dung nguồn dùng để tạo giao dịch",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -2583,8 +3228,23 @@ private fun formatAmountInput(digits: String): String = digits.reversed().chunke
 private fun formatMoney(amount: Long): String =
     NumberFormat.getNumberInstance(Locale.forLanguageTag("vi-VN")).format(amount) + " đ"
 
+private val fullDateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.forLanguageTag("vi-VN"))
+private val transactionDateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy · HH:mm", Locale.forLanguageTag("vi-VN"))
+private val dayNameFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.forLanguageTag("vi-VN"))
+
+private fun formatSignedMoney(amount: Long): String = when {
+    amount > 0 -> "+${formatMoney(amount)}"
+    amount < 0 -> "−${formatMoney(-amount)}"
+    else -> formatMoney(0)
+}
+
 private fun formatDateTime(timestamp: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(timestamp))
+
+private fun formatTransactionDateTime(timestamp: Long): String =
+    Instant.ofEpochMilli(timestamp)
+        .atZone(ZoneId.systemDefault())
+        .format(transactionDateTimeFormatter)
 
 private fun formatTime(timestamp: Long): String =
     DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(timestamp))
@@ -2592,14 +3252,20 @@ private fun formatTime(timestamp: Long): String =
 private fun Long.toLocalDate(): LocalDate =
     Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
 
-private fun formatEpochDay(epochDay: Long): String {
-    val timestamp = LocalDate.ofEpochDay(epochDay)
-        .atStartOfDay(ZoneId.systemDefault())
-        .toInstant()
-        .toEpochMilli()
-    return DateFormat.getDateInstance(DateFormat.SHORT, Locale.forLanguageTag("vi-VN"))
-        .format(Date(timestamp))
+private fun formatEpochDay(epochDay: Long): String =
+    LocalDate.ofEpochDay(epochDay).format(fullDateFormatter)
+
+private fun formatTransactionDayTitle(date: LocalDate): String {
+    val today = LocalDate.now()
+    return when (date) {
+        today -> "Hôm nay"
+        today.minusDays(1) -> "Hôm qua"
+        else -> date.format(dayNameFormatter).capitalizeFirst()
+    }
 }
+
+private fun String.capitalizeFirst(): String =
+    if (isBlank()) this else take(1).uppercase(Locale.forLanguageTag("vi-VN")) + drop(1)
 
 private fun replaceDateKeepingTime(originalTimestamp: Long, epochDay: Long): Long {
     val zone = ZoneId.systemDefault()

@@ -261,6 +261,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prompt: String,
         apiKey: String,
         notificationRules: Map<String, Set<String>>,
+        screenPrompts: Map<String, String>,
         overlayEnabled: Boolean,
     ): Boolean {
         val normalizedApiKey = apiKey.trim()
@@ -278,6 +279,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         appSettings.savePrompt(prompt)
         if (normalizedApiKey.isNotEmpty()) appSettings.saveApiKey(normalizedApiKey)
         appSettings.saveNotificationRules(notificationRules)
+        appSettings.saveScreenPrompts(screenPrompts)
         appSettings.saveOverlayEnabled(overlayEnabled)
         _settings.value = appSettings.snapshot()
         return true

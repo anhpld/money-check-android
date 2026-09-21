@@ -116,11 +116,22 @@ class AppSettings private constructor(context: Context) {
     fun saveScreenPrompt(packageName: String, prompt: String) {
         val normalizedPackage = packageName.trim()
         if (normalizedPackage.isEmpty()) return
-        val updated = screenPrompts().toMutableMap().apply {
-            put(normalizedPackage, prompt.trim().ifBlank { defaultScreenPrompt(normalizedPackage) })
-        }
+        saveScreenPrompts(
+            screenPrompts().toMutableMap().apply {
+                put(normalizedPackage, prompt.trim().ifBlank { defaultScreenPrompt(normalizedPackage) })
+            },
+        )
+    }
+
+    fun saveScreenPrompts(prompts: Map<String, String>) {
+        val normalized = prompts
+            .mapKeys { (packageName, _) -> packageName.trim() }
+            .filterKeys(String::isNotEmpty)
+            .mapValues { (packageName, prompt) ->
+                prompt.trim().ifBlank { defaultScreenPrompt(packageName) }
+            }
         val json = JSONObject().apply {
-            updated.toSortedMap().forEach { (appPackage, appPrompt) -> put(appPackage, appPrompt) }
+            normalized.toSortedMap().forEach { (appPackage, appPrompt) -> put(appPackage, appPrompt) }
         }
         preferences.edit().putString(KEY_SCREEN_PROMPTS, json.toString()).apply()
     }

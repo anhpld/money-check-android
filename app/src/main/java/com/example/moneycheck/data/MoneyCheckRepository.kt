@@ -11,10 +11,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.OutputStream
 import java.util.UUID
 
+private const val DATABASE_NAME = "money-check.db"
+
 class MoneyCheckRepository private constructor(context: Context) {
-    private val helper = MoneyCheckOpenHelper(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val helper = MoneyCheckOpenHelper(appContext)
     private val lock = Any()
     private val _notifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
     private val _inboxNotifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
@@ -47,6 +51,19 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 
     suspend fun getNotification(id: Long): NotificationWithDraft? = io { loadNotification(id) }
+
+    suspend fun exportDatabase(destination: OutputStream) = io {
+        val database = helper.writableDatabase
+        database.rawQuery("PRAGMA wal_checkpoint(FULL)", null).use { cursor ->
+            if (cursor.moveToFirst() && cursor.getInt(0) != 0) {
+                error("Database đang bận, vui lòng thử xuất lại")
+            }
+        }
+        appContext.getDatabasePath(DATABASE_NAME).inputStream().use { source ->
+            source.copyTo(destination)
+        }
+        destination.flush()
+    }
 
     /** Creates a fresh temporary row so a saved sample remains immutable and reusable. */
     suspend fun createTestRun(savedNotificationId: Long): Long? = io {
@@ -497,7 +514,7 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 }
 
-private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, "money-check.db", null, 9) {
+private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, 9) {
     override fun onConfigure(database: SQLiteDatabase) {
         super.onConfigure(database)
         database.setForeignKeyConstraintsEnabled(true)
