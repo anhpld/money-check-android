@@ -38,6 +38,15 @@ class AppSettings private constructor(context: Context) {
         preferences.edit().putString(KEY_MODEL, model.trim().ifBlank { DEFAULT_MODEL }).apply()
     }
 
+    fun chatModel(): String = preferences.getString(KEY_CHAT_MODEL, null)
+        ?.trim()
+        ?.ifBlank { null }
+        ?: model()
+
+    fun saveChatModel(model: String) {
+        preferences.edit().putString(KEY_CHAT_MODEL, model.trim().ifBlank { DEFAULT_MODEL }).apply()
+    }
+
     fun prompt(): String {
         val storedPrompt = preferences.getString(KEY_PROMPT, null)?.trim()
         return when {
@@ -213,6 +222,7 @@ Không bịa thêm thông tin không xuất hiện trong dữ liệu."""
         private const val PREFS = "money_check_settings"
         private const val KEY_API_BASE_URL = "openai_compatible_base_url"
         private const val KEY_MODEL = "openai_model"
+        private const val KEY_CHAT_MODEL = "openai_chat_model"
         private const val KEY_PROMPT = "openai_prompt"
         private const val KEY_PACKAGES = "enabled_notification_packages"
         private const val KEY_NOTIFICATION_RULES = "notification_analysis_rules"

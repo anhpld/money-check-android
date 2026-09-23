@@ -179,6 +179,7 @@ fun MoneyCheckApp(
     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
     val confirmationId by viewModel.confirmationId.collectAsStateWithLifecycle()
     val openAiConnection by viewModel.openAiConnection.collectAsStateWithLifecycle()
+    val isAnalyzingImage by viewModel.isAnalyzingImage.collectAsStateWithLifecycle()
     val chatState by viewModel.chatState.collectAsStateWithLifecycle()
     val retestStates by viewModel.retestStates.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.TRANSACTIONS) }
@@ -251,8 +252,22 @@ fun MoneyCheckApp(
             MainTab.TRANSACTIONS -> TransactionScreen(
                 transactions = transactions,
                 installedApps = installedApps,
+                isAnalyzingImage = isAnalyzingImage,
+                onAnalyzeImageBytes = viewModel::analyzeTransactionImageBytes,
                 onDelete = viewModel::deleteTransaction,
-                onAdd = viewModel::addManualTransaction,
+                onAdd = { appName, packageName, direction, amount, recipient, purpose, transactionTime, llmInputJson, onComplete ->
+                    viewModel.addManualTransaction(
+                        appName = appName,
+                        packageName = packageName,
+                        direction = direction,
+                        amount = amount,
+                        recipient = recipient,
+                        purpose = purpose,
+                        transactionTime = transactionTime,
+                        llmInputJson = llmInputJson,
+                        onComplete = onComplete,
+                    )
+                },
                 onUpdate = viewModel::updateTransaction,
                 onStartScreenRead = onStartScreenRead,
                 modifier = Modifier.padding(innerPadding),
@@ -261,6 +276,9 @@ fun MoneyCheckApp(
             MainTab.CHAT -> ChatScreen(
                 state = chatState,
                 transactionCount = transactions.size,
+                availableModels = openAiConnection.models,
+                onSelectModel = viewModel::selectChatModel,
+                onRefreshModels = viewModel::ensureOpenAiModelsLoaded,
                 onSend = viewModel::sendChatMessage,
                 onClear = viewModel::clearChat,
                 modifier = Modifier.padding(innerPadding),

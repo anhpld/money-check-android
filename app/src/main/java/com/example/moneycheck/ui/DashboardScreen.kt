@@ -1,6 +1,9 @@
 package com.example.moneycheck.ui
 
+import android.net.Uri
 import android.util.LruCache
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -133,6 +136,7 @@ import com.example.moneycheck.settings.InstalledApp
 import com.example.moneycheck.settings.SettingsSnapshot
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.text.NumberFormat
@@ -143,23 +147,82 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+internal fun readBytesFromUri(context: android.content.Context, uri: Uri): ByteArray {
+    try {
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            val bytes = stream.readBytes()
+            if (bytes.isNotEmpty()) return bytes
+        }
+    } catch (_: Exception) {}
+
+    try {
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+            java.io.FileInputStream(pfd.fileDescriptor).use { stream ->
+                val bytes = stream.readBytes()
+                if (bytes.isNotEmpty()) return bytes
+            }
+        }
+    } catch (_: Exception) {}
+
+    try {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
+            afd.createInputStream().use { stream ->
+                val bytes = stream.readBytes()
+                if (bytes.isNotEmpty()) return bytes
+            }
+        }
+    } catch (_: Exception) {}
+
+    throw java.io.IOException("Không thể mở tệp hình ảnh")
+}
+
 @Composable
 internal fun TransactionScreen(
     transactions: List<TransactionEntity>,
     installedApps: List<InstalledApp>,
+    isAnalyzingImage: Boolean = false,
+    onAnalyzeImageBytes: (ByteArray, (TransactionInitialDraft) -> Unit) -> Unit = { _, _ -> },
     onDelete: (Long) -> Unit,
-    onAdd: (String, String, String, Long, String, String, Long, () -> Unit) -> Unit,
+    onAdd: (String, String, String, Long, String, String, Long, String, () -> Unit) -> Unit,
     onUpdate: (Long, String, String, String, Long, String, String, Long, () -> Unit) -> Unit,
     onStartScreenRead: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     var filterStartEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     var filterEndEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     var showDateFilter by rememberSaveable { mutableStateOf(false) }
     var showTransactionEditor by rememberSaveable { mutableStateOf(false) }
     var showAddMethodPicker by rememberSaveable { mutableStateOf(false) }
     var transactionToEditId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var initialDraft by remember { mutableStateOf<TransactionInitialDraft?>(null) }
     val transactionToEdit = transactions.firstOrNull { it.id == transactionToEditId }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val bytes = withContext(Dispatchers.IO) {
+                    try {
+                        readBytesFromUri(context, uri)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                if (bytes != null) {
+                    onAnalyzeImageBytes(bytes) { extractedDraft ->
+                        transactionToEditId = null
+                        initialDraft = extractedDraft
+                        showTransactionEditor = true
+                    }
+                } else {
+                    android.widget.Toast.makeText(context, "Không thể mở tệp hình ảnh đã chọn", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
     val filteredTransactions = remember(transactions, filterStartEpochDay, filterEndEpochDay) {
         if (filterStartEpochDay == null || filterEndEpochDay == null) transactions else {
             transactions.filter { transaction ->
@@ -297,17 +360,23 @@ internal fun TransactionScreen(
     if (showTransactionEditor) {
         TransactionEditorSheet(
             transaction = transactionToEdit,
+            initialDraft = initialDraft,
             installedApps = installedApps,
-            onDismiss = { showTransactionEditor = false },
-            onSave = { appName, packageName, direction, amount, recipient, purpose, transactionTime ->
+            onDismiss = {
+                showTransactionEditor = false
+                initialDraft = null
+            },
+            onSave = { appName, packageName, direction, amount, recipient, purpose, transactionTime, llmInputJson ->
                 val editing = transactionToEdit
                 if (editing == null) {
-                    onAdd(appName, packageName, direction, amount, recipient, purpose, transactionTime) {
+                    onAdd(appName, packageName, direction, amount, recipient, purpose, transactionTime, llmInputJson) {
                         showTransactionEditor = false
+                        initialDraft = null
                     }
                 } else {
                     onUpdate(editing.id, appName, packageName, direction, amount, recipient, purpose, transactionTime) {
                         showTransactionEditor = false
+                        initialDraft = null
                     }
                 }
             },
@@ -320,12 +389,46 @@ internal fun TransactionScreen(
             onManualInput = {
                 showAddMethodPicker = false
                 transactionToEditId = null
+                initialDraft = null
                 showTransactionEditor = true
+            },
+            onPickImage = {
+                showAddMethodPicker = false
+                imagePickerLauncher.launch("image/*")
             },
             onReadScreen = {
                 showAddMethodPicker = false
                 onStartScreenRead()
             },
+        )
+    }
+
+    if (isAnalyzingImage) {
+        AlertDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            text = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(12.dp),
+                ) {
+                    CircularProgressIndicator()
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Đang phân tích hình ảnh…",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "AI đang đọc và trích xuất thông tin giao dịch",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
         )
     }
 }

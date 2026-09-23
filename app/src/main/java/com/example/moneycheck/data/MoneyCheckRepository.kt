@@ -247,6 +247,7 @@ class MoneyCheckRepository private constructor(context: Context) {
                                 put("title", notification.title)
                                 put("text", notification.text)
                                 put("expanded_content", notification.expandedContent)
+                                put("model_output", draft?.rawModelJson.orEmpty())
                             }.toString()
                         },
                     )
@@ -293,6 +294,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         recipient: String,
         purpose: String,
         transactionTime: Long,
+        llmInputJson: String = "",
     ) = io {
         helper.writableDatabase.insertOrThrow(
             "transactions",
@@ -307,7 +309,7 @@ class MoneyCheckRepository private constructor(context: Context) {
                 put("packageName", packageName)
                 put("sourceType", TransactionSource.MANUAL)
                 put("transactionTime", transactionTime)
-                put("llmInputJson", "")
+                put("llmInputJson", llmInputJson)
                 put("confirmedAt", System.currentTimeMillis())
             },
         )

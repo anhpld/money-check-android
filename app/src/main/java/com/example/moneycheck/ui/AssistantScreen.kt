@@ -68,6 +68,7 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
@@ -147,6 +148,9 @@ import java.time.format.DateTimeFormatter
 internal fun ChatScreen(
     state: ChatState,
     transactionCount: Int,
+    availableModels: List<String> = emptyList(),
+    onSelectModel: (String) -> Unit = {},
+    onRefreshModels: () -> Unit = {},
     onSend: (String) -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
@@ -154,6 +158,15 @@ internal fun ChatScreen(
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
+    var modelMenuExpanded by remember { mutableStateOf(false) }
+    var showCustomModelDialog by rememberSaveable { mutableStateOf(false) }
+    var customModelInput by rememberSaveable { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        if (availableModels.isEmpty()) {
+            onRefreshModels()
+        }
+    }
 
     fun send() {
         val question = input.trim()
@@ -193,7 +206,148 @@ internal fun ChatScreen(
             }
         }
 
-        HorizontalDivider()
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 2.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Box {
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { modelMenuExpanded = true },
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Code,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = state.selectedModel.ifBlank { "Chọn model" },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Icon(
+                                Icons.Filled.ArrowDropDown,
+                                contentDescription = "Chọn model",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = modelMenuExpanded,
+                        onDismissRequest = { modelMenuExpanded = false },
+                    ) {
+                        if (availableModels.isNotEmpty()) {
+                            availableModels.forEach { modelName ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = modelName,
+                                            fontWeight = if (modelName == state.selectedModel) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (modelName == state.selectedModel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    },
+                                    onClick = {
+                                        onSelectModel(modelName)
+                                        modelMenuExpanded = false
+                                    },
+                                )
+                            }
+                            HorizontalDivider()
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Tải lại danh sách model") },
+                            onClick = {
+                                onRefreshModels()
+                                modelMenuExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Nhập model khác…") },
+                            onClick = {
+                                customModelInput = state.selectedModel
+                                showCustomModelDialog = true
+                                modelMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Model chat",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        if (showCustomModelDialog) {
+            AlertDialog(
+                onDismissRequest = { showCustomModelDialog = false },
+                title = { Text("Nhập model chat") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "Nhập mã định danh model (ví dụ: gpt-4o, claude-3-5-sonnet, gemini-1.5-flash...)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedTextField(
+                            value = customModelInput,
+                            onValueChange = { customModelInput = it },
+                            placeholder = { Text("Tên model") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val trimmed = customModelInput.trim()
+                            if (trimmed.isNotEmpty()) {
+                                onSelectModel(trimmed)
+                            }
+                            showCustomModelDialog = false
+                        },
+                        enabled = customModelInput.isNotBlank(),
+                    ) {
+                        Text("Xác nhận")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCustomModelDialog = false }) {
+                        Text("Hủy")
+                    }
+                },
+            )
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
 
         LazyColumn(
             state = listState,

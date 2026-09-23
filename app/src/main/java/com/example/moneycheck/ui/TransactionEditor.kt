@@ -143,33 +143,47 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+data class TransactionInitialDraft(
+    val direction: String = "expense",
+    val amount: Long? = null,
+    val recipient: String = "",
+    val purpose: String = "",
+    val appName: String = "Tiền mặt",
+    val packageName: String = "",
+    val transactionTime: Long = System.currentTimeMillis(),
+    val rawModelJson: String = "",
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TransactionEditorSheet(
     transaction: TransactionEntity?,
+    initialDraft: TransactionInitialDraft? = null,
     installedApps: List<InstalledApp>,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Long, String, String, Long) -> Unit,
+    onSave: (String, String, String, Long, String, String, Long, String) -> Unit,
 ) {
-    val initialTime = transaction?.transactionTime ?: System.currentTimeMillis()
-    var direction by rememberSaveable(transaction?.id) { mutableStateOf(transaction?.direction ?: "expense") }
-    var amount by rememberSaveable(transaction?.id) { mutableStateOf(transaction?.amount?.toString().orEmpty()) }
-    var recipient by rememberSaveable(transaction?.id) { mutableStateOf(transaction?.recipient.orEmpty()) }
-    var purpose by rememberSaveable(transaction?.id) { mutableStateOf(transaction?.purpose.orEmpty()) }
-    var selectedAppName by rememberSaveable(transaction?.id) { mutableStateOf(transaction?.appName ?: "Tiền mặt") }
-    var selectedPackageName by rememberSaveable(transaction?.id) { mutableStateOf(transaction?.packageName.orEmpty()) }
-    var appQuery by rememberSaveable(transaction?.id) { mutableStateOf("") }
-    var showAppSearch by rememberSaveable(transaction?.id) {
+    val initialTime = transaction?.transactionTime ?: initialDraft?.transactionTime ?: System.currentTimeMillis()
+    val initialDraftKey = initialDraft?.let { "${it.direction}-${it.amount}-${it.recipient}-${it.purpose}-${it.appName}" }
+    val stateKey = transaction?.id ?: initialDraftKey
+    var direction by rememberSaveable(stateKey) { mutableStateOf(transaction?.direction ?: initialDraft?.direction ?: "expense") }
+    var amount by rememberSaveable(stateKey) { mutableStateOf(transaction?.amount?.toString() ?: initialDraft?.amount?.toString().orEmpty()) }
+    var recipient by rememberSaveable(stateKey) { mutableStateOf(transaction?.recipient ?: initialDraft?.recipient.orEmpty()) }
+    var purpose by rememberSaveable(stateKey) { mutableStateOf(transaction?.purpose ?: initialDraft?.purpose.orEmpty()) }
+    var selectedAppName by rememberSaveable(stateKey) { mutableStateOf(transaction?.appName ?: initialDraft?.appName ?: "Tiền mặt") }
+    var selectedPackageName by rememberSaveable(stateKey) { mutableStateOf(transaction?.packageName ?: initialDraft?.packageName.orEmpty()) }
+    var appQuery by rememberSaveable(stateKey) { mutableStateOf("") }
+    var showAppSearch by rememberSaveable(stateKey) {
         mutableStateOf(false)
     }
-    var selectedEpochDay by rememberSaveable(transaction?.id) { mutableStateOf(initialTime.toLocalDate().toEpochDay()) }
-    val initialLocalTime = remember(transaction?.id) {
+    var selectedEpochDay by rememberSaveable(stateKey) { mutableStateOf(initialTime.toLocalDate().toEpochDay()) }
+    val initialLocalTime = remember(stateKey) {
         Instant.ofEpochMilli(initialTime).atZone(ZoneId.systemDefault()).toLocalTime()
     }
-    var selectedHour by rememberSaveable(transaction?.id) { mutableStateOf(initialLocalTime.hour) }
-    var selectedMinute by rememberSaveable(transaction?.id) { mutableStateOf(initialLocalTime.minute) }
-    var showDatePicker by rememberSaveable(transaction?.id) { mutableStateOf(false) }
-    var showTimePicker by rememberSaveable(transaction?.id) { mutableStateOf(false) }
+    var selectedHour by rememberSaveable(stateKey) { mutableStateOf(initialLocalTime.hour) }
+    var selectedMinute by rememberSaveable(stateKey) { mutableStateOf(initialLocalTime.minute) }
+    var showDatePicker by rememberSaveable(stateKey) { mutableStateOf(false) }
+    var showTimePicker by rememberSaveable(stateKey) { mutableStateOf(false) }
     val parsedAmount = amount.toLongOrNull()
     val validation = validateManualTransaction(
         amountInput = amount,
@@ -377,6 +391,13 @@ internal fun TransactionEditorSheet(
                 ) { Text("Hủy") }
                 Button(
                     onClick = {
+                        val llmInput = transaction?.llmInputJson?.ifBlank { null }
+                            ?: initialDraft?.rawModelJson?.takeIf(String::isNotBlank)?.let { raw ->
+                                JSONObject().apply {
+                                    put("source", "image_vision")
+                                    put("model_output", raw)
+                                }.toString()
+                            }.orEmpty()
                         onSave(
                             selectedAppName,
                             selectedPackageName,
@@ -389,6 +410,7 @@ internal fun TransactionEditorSheet(
                                 selectedHour,
                                 selectedMinute,
                             ),
+                            llmInput,
                         )
                     },
                     modifier = Modifier.weight(1f),

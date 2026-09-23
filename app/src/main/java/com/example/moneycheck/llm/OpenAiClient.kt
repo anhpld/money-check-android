@@ -14,7 +14,169 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+data class VisionExtractedTransaction(
+    val direction: String = "unknown",
+    val amount: Long? = null,
+    val recipient: String = "",
+    val purpose: String = "",
+    val appName: String = "",
+    val transactionTime: Long? = null,
+    val rawModelJson: String = "",
+)
+
 internal class OpenAiClient {
+    fun analyzeImage(
+        base64Image: String,
+        mimeType: String = "image/jpeg",
+        apiBaseUrl: String,
+        apiKey: String,
+        model: String,
+        prompt: String = DEFAULT_VISION_PROMPT,
+    ): VisionExtractedTransaction {
+        val modelJson = runCatching {
+            executeImageCall(base64Image, mimeType, apiBaseUrl, apiKey, model, prompt, useJsonSchema = true)
+        }.recoverCatching {
+            executeImageCall(base64Image, mimeType, apiBaseUrl, apiKey, model, prompt, useJsonSchema = false)
+        }.getOrThrow()
+
+        val parsed = JSONObject(modelJson)
+        val transactionTimeText = if (!parsed.isNull("transaction_time")) {
+            parsed.optString("transaction_time").trim().takeIf(String::isNotEmpty)
+        } else {
+            null
+        }
+
+        return VisionExtractedTransaction(
+            direction = parsed.optString("direction")
+                .takeIf { it in setOf("income", "expense", "unknown") }
+                ?: "unknown",
+            amount = if (parsed.isNull("amount")) null else parsed.optLong("amount").takeIf { it > 0 } ?: parsed.optString("amount").toLongOrNull(),
+            recipient = parsed.optString("recipient")
+                .ifBlank { parsed.optString("recipent") }
+                .trim(),
+            purpose = parsed.optString("purpose").trim(),
+            appName = parsed.optString("app_name").trim(),
+            transactionTime = transactionTimeText?.let(::parseTransactionTime),
+            rawModelJson = modelJson,
+        )
+    }
+
+    private fun executeImageCall(
+        base64Image: String,
+        mimeType: String,
+        apiBaseUrl: String,
+        apiKey: String,
+        model: String,
+        prompt: String,
+        useJsonSchema: Boolean,
+    ): String {
+        val userContent = JSONArray().apply {
+            put(
+                JSONObject().apply {
+                    put("type", "text")
+                    put(
+                        "text",
+                        if (useJsonSchema) {
+                            "Hãy trích xuất thông tin giao dịch từ ảnh này."
+                        } else {
+                            "Hãy trích xuất thông tin giao dịch từ ảnh này và trả về JSON duy nhất với các trường: direction ('income'/'expense'/'unknown'), amount (số nguyên), recipient (chuỗi), purpose (chuỗi), app_name (chuỗi), transaction_time (chuỗi ISO 8601 hoặc null)."
+                        },
+                    )
+                },
+            )
+            put(
+                JSONObject().apply {
+                    put("type", "image_url")
+                    put(
+                        "image_url",
+                        JSONObject().apply {
+                            put("url", "data:$mimeType;base64,$base64Image")
+                        },
+                    )
+                },
+            )
+        }
+
+        val request = JSONObject().apply {
+            put("model", model)
+            put("stream", false)
+            put(
+                "messages",
+                JSONArray().apply {
+                    put(JSONObject().put("role", "system").put("content", prompt))
+                    put(JSONObject().put("role", "user").put("content", userContent))
+                },
+            )
+            if (useJsonSchema) {
+                put(
+                    "response_format",
+                    JSONObject()
+                        .put("type", "json_schema")
+                        .put("json_schema", visionResponseFormat()),
+                )
+            }
+        }
+
+        val connection = (URL(OpenAiCompatibleEndpoint.url(apiBaseUrl, "chat/completions")).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 30_000
+            readTimeout = 60_000
+            doOutput = true
+            setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+            setRequestProperty("Content-Type", "application/json")
+        }
+
+        try {
+            connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(request.toString()) }
+            val statusCode = connection.responseCode
+            val responseBody = (if (statusCode in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader(Charsets.UTF_8)
+                ?.use { it.readText() }
+                .orEmpty()
+            if (statusCode !in 200..299) {
+                val apiMessage = runCatching {
+                    JSONObject(responseBody).optJSONObject("error")?.optString("message")
+                }.getOrNull()
+                throw IOException(apiMessage?.takeIf(String::isNotBlank) ?: "API HTTP $statusCode")
+            }
+
+            val modelOutput = JSONObject(responseBody)
+                .optJSONArray("choices")
+                ?.optJSONObject(0)
+                ?.optJSONObject("message")
+                ?.optString("content")
+                ?.takeIf(String::isNotBlank)
+                ?: throw IOException("API không trả về nội dung phân tích ảnh")
+            return normalizeJsonObject(modelOutput)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun visionResponseFormat(): JSONObject = JSONObject().apply {
+        put("name", "vision_transaction_extraction")
+        put("strict", true)
+        put(
+            "schema",
+            JSONObject().apply {
+                put("type", "object")
+                put("additionalProperties", false)
+                put(
+                    "properties",
+                    JSONObject().apply {
+                        put("direction", enum("income", "expense", "unknown"))
+                        put("amount", nullableType("integer"))
+                        put("recipient", type("string"))
+                        put("purpose", type("string"))
+                        put("app_name", type("string"))
+                        put("transaction_time", nullableType("string"))
+                    },
+                )
+                put("required", JSONArray(listOf("direction", "amount", "recipient", "purpose", "app_name", "transaction_time")))
+            },
+        )
+    }
+
     fun analyze(
         notification: CapturedNotificationEntity,
         apiBaseUrl: String,
@@ -222,4 +384,15 @@ internal class OpenAiClient {
 
     private fun enum(vararg values: String) =
         JSONObject().put("type", "string").put("enum", JSONArray(values.toList()))
+
+    companion object {
+        const val DEFAULT_VISION_PROMPT = """Bạn là trợ lý tài chính trích xuất dữ liệu từ hình ảnh biên lai, hóa đơn hoặc ảnh chụp màn hình giao dịch chuyển tiền/thanh toán.
+Chỉ dựa vào nội dung trong ảnh để xác định các trường:
+- direction: income khi tiền vào/nhận tiền, expense khi tiền ra/chuyển khoản/thanh toán, unknown nếu không rõ.
+- amount: số tiền giao dịch dưới dạng số nguyên, bỏ dấu chấm/phẩy phân cách hàng nghìn. Dùng null nếu không tìm thấy.
+- recipient: tên người nhận, bên thụ hưởng hoặc đơn vị thanh toán (hoặc người gửi nếu là tiền vào). Chuỗi rỗng nếu không xác định được.
+- purpose: nội dung chuyển tiền, lý do giao dịch, tên dịch vụ hoặc lời nhắn. Chuỗi rỗng nếu không có.
+- app_name: tên ngân hàng, ví điện tử hoặc ứng dụng thực hiện giao dịch (ví dụ Vietcombank, MB Bank, Techcombank, MoMo, ShopeePay, ZaloPay, BIDV, VietinBank...). Chuỗi rỗng nếu không rõ.
+- transaction_time: thời gian giao dịch thực tế theo ISO 8601 (yyyy-MM-ddTHH:mm:ss hoặc yyyy-MM-dd), null nếu không có trên ảnh."""
+    }
 }

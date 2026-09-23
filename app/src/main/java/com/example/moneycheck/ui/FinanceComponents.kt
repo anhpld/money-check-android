@@ -183,6 +183,7 @@ internal fun PageHeader(
 internal fun ManualAddMethodDialog(
     onDismiss: () -> Unit,
     onManualInput: () -> Unit,
+    onPickImage: () -> Unit,
     onReadScreen: () -> Unit,
 ) {
     AlertDialog(
@@ -201,6 +202,20 @@ internal fun ManualAddMethodDialog(
                             "Nhập khoản thu hoặc chi tiền mặt; ứng dụng và người nhận là tùy chọn.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onPickImage),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Đọc từ ảnh", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Chọn ảnh chụp màn hình hoặc biên lai để AI tự động trích xuất thông tin giao dịch.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                         )
                     }
                 }
@@ -535,7 +550,12 @@ internal fun TransactionCard(
     var showLlmInput by rememberSaveable(transaction.id) { mutableStateOf(false) }
     val llmInput = remember(transaction.llmInputJson) { parseLlmInput(transaction.llmInputJson) }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable {
+                showLlmInput = true
+            },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -580,6 +600,35 @@ internal fun TransactionCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    if (llmInput?.modelOutput?.isNotBlank() == true || transaction.llmInputJson.isNotBlank()) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable { showLlmInput = true },
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = CircleShape,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Code,
+                                    contentDescription = "Log LLM",
+                                    modifier = Modifier.size(11.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    "Log LLM",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -623,16 +672,14 @@ internal fun TransactionCard(
                             onEdit()
                         },
                     )
-                    if (llmInput != null) {
-                        DropdownMenuItem(
-                            text = { Text("Dữ liệu trích xuất") },
-                            leadingIcon = { Icon(Icons.Outlined.Code, contentDescription = null) },
-                            onClick = {
-                                menuExpanded = false
-                                showLlmInput = true
-                            },
-                        )
-                    }
+                    DropdownMenuItem(
+                        text = { Text("Dữ liệu trích xuất & Log") },
+                        leadingIcon = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            showLlmInput = true
+                        },
+                    )
                     DropdownMenuItem(
                         text = { Text("Xóa giao dịch", color = MaterialTheme.colorScheme.error) },
                         leadingIcon = {
@@ -653,12 +700,21 @@ internal fun TransactionCard(
     }
 
     if (showLlmInput) {
-        llmInput?.let { input ->
-            LlmInputDialog(
-                input = input,
-                onDismiss = { showLlmInput = false },
-            )
-        }
+        val displayInput = llmInput ?: LlmInputSnapshot(
+            source = if (transaction.sourceType == TransactionSource.MANUAL) "manual" else "automatic",
+            title = transaction.purpose.ifBlank { "Giao dịch ${transaction.appName}" },
+            text = "Số tiền: ${formatMoney(transaction.amount)} | Bên nhận: ${transaction.recipient.ifBlank { "Không có" }} | Ứng dụng: ${transaction.appName} | Thời gian: ${formatTransactionDateTime(transaction.transactionTime)}",
+            expandedContent = "",
+            modelOutput = "",
+        )
+        LlmInputDialog(
+            input = displayInput,
+            onDismiss = { showLlmInput = false },
+            onEdit = {
+                showLlmInput = false
+                onEdit()
+            },
+        )
     }
 }
 
@@ -1060,21 +1116,24 @@ internal fun parseLlmInput(json: String): LlmInputSnapshot? {
     if (json.isBlank()) return null
     return runCatching {
         val value = JSONObject(json)
-        if (value.optString("source") == ScreenCaptureSessionStore.SOURCE) {
-            LlmInputSnapshot(
-                source = ScreenCaptureSessionStore.SOURCE,
-                expandedContent = value.optString("screen_xml"),
-                prompt = value.optString("prompt"),
-                model = value.optString("model"),
-                modelOutput = value.optString("model_output"),
-            )
+        val source = value.optString("source").ifBlank { "notification" }
+        val rawModel = value.optString("model_output").ifBlank { value.optString("raw_model_json") }
+        val finalModelOutput = if (rawModel.isNotBlank()) {
+            rawModel
+        } else if (value.has("direction") || value.has("amount")) {
+            json
         } else {
-            LlmInputSnapshot(
-                title = value.optString("title"),
-                text = value.optString("text"),
-                expandedContent = value.optString("expanded_content"),
-            )
+            ""
         }
+        LlmInputSnapshot(
+            source = source,
+            title = value.optString("title"),
+            text = value.optString("text"),
+            expandedContent = value.optString("screen_xml").ifBlank { value.optString("expanded_content") },
+            prompt = value.optString("prompt"),
+            model = value.optString("model"),
+            modelOutput = finalModelOutput,
+        )
     }.getOrNull()
 }
 
@@ -1082,6 +1141,7 @@ internal fun parseLlmInput(json: String): LlmInputSnapshot? {
 internal fun LlmInputDialog(
     input: LlmInputSnapshot,
     onDismiss: () -> Unit,
+    onEdit: (() -> Unit)? = null,
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -1103,12 +1163,19 @@ internal fun LlmInputDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Dữ liệu trích xuất", style = MaterialTheme.typography.titleLarge)
+                        Text("Dữ liệu trích xuất & Log LLM", style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "Nội dung nguồn dùng để tạo giao dịch",
+                            "Chi tiết nguồn và kết quả phân tích AI",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    if (onEdit != null) {
+                        TextButton(onClick = onEdit) {
+                            Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Sửa")
+                        }
                     }
                     TextButton(onClick = onDismiss) { Text("Đóng") }
                 }
@@ -1138,16 +1205,35 @@ internal fun LlmInputDetails(input: LlmInputSnapshot) {
                 Modifier.padding(13.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (input.source == ScreenCaptureSessionStore.SOURCE) {
-                    LlmInputField("source", input.source)
-                    LlmInputField("model", input.model)
-                    LlmInputField("prompt", input.prompt)
-                    LlmInputField("screen_xml", input.expandedContent)
-                    if (input.modelOutput.isNotBlank()) LlmInputField("model_output", input.modelOutput)
+                if (input.modelOutput.isNotBlank()) {
+                    val formatted = remember(input.modelOutput) {
+                        runCatching {
+                            val trimmed = input.modelOutput.trim()
+                            when {
+                                trimmed.startsWith("{") -> JSONObject(trimmed).toString(2)
+                                trimmed.startsWith("[") -> org.json.JSONArray(trimmed).toString(2)
+                                else -> input.modelOutput
+                            }
+                        }.getOrDefault(input.modelOutput)
+                    }
+                    LlmInputField("Log kết quả LLM trả ra (model_output)", formatted)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 } else {
-                    LlmInputField("title", input.title)
-                    LlmInputField("text", input.text)
-                    LlmInputField("expanded_content", input.expandedContent)
+                    LlmInputField(
+                        "Log kết quả LLM trả ra (model_output)",
+                        "(Không có log phản hồi của LLM cho giao dịch này)",
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                if (input.source.isNotBlank() && input.source != "notification") {
+                    LlmInputField("source", input.source)
+                }
+                if (input.model.isNotBlank()) LlmInputField("model", input.model)
+                if (input.prompt.isNotBlank()) LlmInputField("prompt", input.prompt)
+                if (input.title.isNotBlank()) LlmInputField("title", input.title)
+                if (input.text.isNotBlank()) LlmInputField("text", input.text)
+                if (input.expandedContent.isNotBlank()) {
+                    LlmInputField(if (input.source == ScreenCaptureSessionStore.SOURCE) "screen_xml" else "expanded_content", input.expandedContent)
                 }
             }
         }

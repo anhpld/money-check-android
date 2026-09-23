@@ -175,6 +175,7 @@ internal fun TransactionConfirmationDialog(
                 title = item.notification.title,
                 text = item.notification.text,
                 expandedContent = item.notification.expandedContent,
+                modelOutput = draft.rawModelJson,
             )
         }
     }
