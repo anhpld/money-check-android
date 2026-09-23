@@ -135,6 +135,16 @@ Chạy kiểm tra lint:
 ./gradlew lint
 ```
 
+## Điều hướng tài chính
+
+Thanh điều hướng chính tập trung vào bốn điểm đến: **Tổng quan**, **Duyệt** (có badge số giao dịch đang chờ), **Trợ lý** và **Cài đặt**. Hộp thư notification, nhật ký Đã bắt và mẫu Đã lưu là công cụ phụ trong Cài đặt, không chiếm chỗ trong luồng ghi sổ. Khi có notification đã phân tích sẵn và chưa xử lý, bảng xác nhận tự mở; vào Duyệt rồi chọn **Xem và lưu** để mở lại từng bản nháp. Deep-link xác nhận từ notification Android vẫn mở đúng bản nháp được chỉ định.
+
+Khi thêm giao dịch thủ công, biểu mẫu mặc định là **Tiền mặt**. Ứng dụng và người nhận chỉ là thông tin tùy chọn; số tiền, chiều giao dịch và nội dung được báo lỗi ngay trong biểu mẫu.
+
+Trong Cài đặt, tùy chọn cục bộ (prompt, rule notification, prompt đọc màn hình, popup) được lưu độc lập và không yêu cầu API key hoặc kết nối mạng. URL/key/model AI có luồng kiểm tra và lưu riêng.
+
+Chi tiết ma trận kiểm thử UI và blocker: [`docs/ui-verification.md`](docs/ui-verification.md).
+
 ## Cấu hình lần đầu
 
 1. Cài và mở ứng dụng.

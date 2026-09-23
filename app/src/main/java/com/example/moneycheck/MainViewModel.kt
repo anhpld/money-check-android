@@ -331,14 +331,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         validateOpenAiKey(appSettings.apiBaseUrl(), "")
     }
 
-    fun saveSettings(
-        apiBaseUrl: String,
-        model: String,
+    fun saveLocalPreferences(
         prompt: String,
-        apiKey: String,
         notificationRules: Map<String, Set<String>>,
         screenPrompts: Map<String, String>,
         overlayEnabled: Boolean,
+    ) {
+        appSettings.savePrompt(prompt)
+        appSettings.saveNotificationRules(notificationRules)
+        appSettings.saveScreenPrompts(screenPrompts)
+        appSettings.saveOverlayEnabled(overlayEnabled)
+        _settings.value = appSettings.snapshot()
+    }
+
+    fun saveAiConnection(
+        apiBaseUrl: String,
+        model: String,
+        apiKey: String,
     ): Boolean {
         val normalizedApiBaseUrl = runCatching { OpenAiCompatibleEndpoint.normalize(apiBaseUrl) }
             .getOrElse {
@@ -360,11 +369,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         appSettings.saveApiBaseUrl(normalizedApiBaseUrl)
         appSettings.saveModel(model)
-        appSettings.savePrompt(prompt)
         if (normalizedApiKey.isNotEmpty()) appSettings.saveApiKey(normalizedApiKey)
-        appSettings.saveNotificationRules(notificationRules)
-        appSettings.saveScreenPrompts(screenPrompts)
-        appSettings.saveOverlayEnabled(overlayEnabled)
         _settings.value = appSettings.snapshot()
         return true
     }
