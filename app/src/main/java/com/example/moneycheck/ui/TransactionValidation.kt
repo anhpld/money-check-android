@@ -8,6 +8,23 @@ data class ManualTransactionValidation(
     val isValid: Boolean get() = errors.isEmpty()
 }
 
+/**
+ * Merges persisted settings changes into a locally edited draft.
+ * A key is considered dirty when the draft differs from the last persisted snapshot.
+ */
+internal fun reconcileDraftMap(
+    draft: Map<String, String>,
+    lastPersisted: Map<String, String>,
+    persisted: Map<String, String>,
+): Map<String, String> {
+    val keys = draft.keys + lastPersisted.keys + persisted.keys
+    return keys.mapNotNull { key ->
+        val isDirty = draft[key] != lastPersisted[key]
+        val value = if (isDirty) draft[key] else persisted[key]
+        value?.let { key to it }
+    }.toMap()
+}
+
 /** Pure validation for the manual transaction form. Cash entries intentionally have no app/recipient requirement. */
 fun validateManualTransaction(
     amountInput: String,

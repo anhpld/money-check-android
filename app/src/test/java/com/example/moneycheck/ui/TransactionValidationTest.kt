@@ -44,4 +44,46 @@ class TransactionValidationTest {
 
         assertEquals("Chọn chiều giao dịch", result.errors[ManualTransactionField.DIRECTION])
     }
+
+    @Test
+    fun `unchanged draft incorporates inbox title and new app`() {
+        val original = mapOf("bank" to "Old")
+        val persisted = mapOf("bank" to "Old\nNew", "wallet" to "Payment")
+        assertEquals(persisted, reconcileDraftMap(original, original, persisted))
+    }
+
+    @Test
+    fun `local deletion and edits survive unrelated external additions`() {
+        val original = mapOf("bank" to "Old", "removed" to "Title")
+        val draft = mapOf("bank" to "Edited")
+        val persisted = original + ("wallet" to "Payment")
+        assertEquals(draft + ("wallet" to "Payment"), reconcileDraftMap(draft, original, persisted))
+    }
+
+    @Test
+    fun `external removal is applied to an unchanged field`() {
+        val original = mapOf("bank" to "Old")
+        assertEquals(emptyMap<String, String>(), reconcileDraftMap(original, original, emptyMap()))
+    }
+
+    @Test
+    fun `save advances baseline for later external edits`() {
+        val saved = mapOf("bank" to "Edited")
+        val persisted = saved + ("bank" to "Edited\nNew")
+        assertEquals(persisted, reconcileDraftMap(saved, saved, persisted))
+    }
+
+    @Test
+    fun `reconcile draft imports external changes without overwriting dirty fields`() {
+        val merged = reconcileDraftMap(
+            draft = mapOf("bank" to "Đã sửa cục bộ", "cash" to ""),
+            lastPersisted = mapOf("bank" to "Cũ", "cash" to ""),
+            persisted = mapOf("bank" to "Cập nhật ngoài", "cash" to "", "wallet" to "Ví điện tử"),
+        )
+
+        assertEquals(
+            mapOf("bank" to "Đã sửa cục bộ", "cash" to "", "wallet" to "Ví điện tử"),
+            merged,
+        )
+    }
 }

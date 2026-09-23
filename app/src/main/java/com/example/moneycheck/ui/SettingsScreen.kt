@@ -181,6 +181,12 @@ internal fun SettingsScreen(
     }
     var screenPromptInputs by rememberSaveable(stateSaver = StringMapSaver) { mutableStateOf(settings.screenPrompts.toMap()) }
     var overlayEnabled by rememberSaveable { mutableStateOf(settings.overlayEnabled) }
+    var lastPersistedRules by rememberSaveable(stateSaver = StringMapSaver) {
+        mutableStateOf(settings.notificationRules.mapValues { (_, titles) -> titles.sorted().joinToString("\n") })
+    }
+    var lastPersistedScreenPrompts by rememberSaveable(stateSaver = StringMapSaver) {
+        mutableStateOf(settings.screenPrompts.toMap())
+    }
     var query by rememberSaveable { mutableStateOf("") }
     var screenPromptQuery by rememberSaveable { mutableStateOf("") }
     var saved by rememberSaveable { mutableStateOf(false) }
@@ -189,6 +195,18 @@ internal fun SettingsScreen(
 
     LaunchedEffect(openAiConnection.models) {
         if (openAiConnection.models.isNotEmpty() && model !in openAiConnection.models) model = openAiConnection.models.first()
+    }
+
+    fun reconcilePersistedMaps() {
+        val persistedRules = settings.notificationRules.mapValues { (_, titles) -> titles.sorted().joinToString("\n") }
+        notificationRuleInputs = reconcileDraftMap(notificationRuleInputs, lastPersistedRules, persistedRules)
+        screenPromptInputs = reconcileDraftMap(screenPromptInputs, lastPersistedScreenPrompts, settings.screenPrompts)
+        lastPersistedRules = persistedRules
+        lastPersistedScreenPrompts = settings.screenPrompts.toMap()
+    }
+
+    LaunchedEffect(settings.notificationRules, settings.screenPrompts) {
+        reconcilePersistedMaps()
     }
 
     val normalizedQuery = query.trim()
@@ -246,6 +264,8 @@ internal fun SettingsScreen(
                     Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = {
+                            // Also reconcile at the save boundary if an effect has not run yet.
+                            reconcilePersistedMaps()
                             val rules = notificationRuleInputs.mapValues { (_, input) ->
                                 input.lineSequence().map(String::trim).filter(String::isNotEmpty).toSet()
                             }
