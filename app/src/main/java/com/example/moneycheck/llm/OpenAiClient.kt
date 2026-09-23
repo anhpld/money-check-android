@@ -17,11 +17,13 @@ import java.time.format.DateTimeFormatter
 internal class OpenAiClient {
     fun analyze(
         notification: CapturedNotificationEntity,
+        apiBaseUrl: String,
         apiKey: String,
         model: String,
         prompt: String,
     ): ExtractedDraftEntity = analyzeInput(
         notification = notification,
+        apiBaseUrl = apiBaseUrl,
         apiKey = apiKey,
         model = model,
         prompt = prompt,
@@ -35,12 +37,14 @@ internal class OpenAiClient {
 
     fun analyzeScreen(
         notification: CapturedNotificationEntity,
+        apiBaseUrl: String,
         apiKey: String,
         model: String,
         prompt: String,
         cleanedXml: String,
     ): ExtractedDraftEntity = analyzeInput(
         notification = notification,
+        apiBaseUrl = apiBaseUrl,
         apiKey = apiKey,
         model = model,
         prompt = prompt,
@@ -50,6 +54,7 @@ internal class OpenAiClient {
 
     private fun analyzeInput(
         notification: CapturedNotificationEntity,
+        apiBaseUrl: String,
         apiKey: String,
         model: String,
         prompt: String,
@@ -58,13 +63,20 @@ internal class OpenAiClient {
     ): ExtractedDraftEntity {
         val request = JSONObject().apply {
             put("model", model)
-            put("store", false)
-            put("instructions", prompt)
-            put("input", input)
-            put("text", JSONObject().put("format", responseFormat(includeTransactionTime)))
+            put("stream", false)
+            put("messages", JSONArray().apply {
+                put(JSONObject().put("role", "system").put("content", prompt))
+                put(JSONObject().put("role", "user").put("content", input))
+            })
+            put(
+                "response_format",
+                JSONObject()
+                    .put("type", "json_schema")
+                    .put("json_schema", responseFormat(includeTransactionTime)),
+            )
         }
 
-        val connection = (URL(RESPONSES_URL).openConnection() as HttpURLConnection).apply {
+        val connection = (URL(OpenAiCompatibleEndpoint.url(apiBaseUrl, "chat/completions")).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 20_000
             readTimeout = 45_000
@@ -84,11 +96,17 @@ internal class OpenAiClient {
                 val apiMessage = runCatching {
                     JSONObject(responseBody).optJSONObject("error")?.optString("message")
                 }.getOrNull()
-                throw IOException(apiMessage?.takeIf(String::isNotBlank) ?: "OpenAI HTTP $statusCode")
+                throw IOException(apiMessage?.takeIf(String::isNotBlank) ?: "API HTTP $statusCode")
             }
 
-            val modelJson = extractOutputText(JSONObject(responseBody))
-                ?: throw IOException("OpenAI không trả về output_text")
+            val modelOutput = JSONObject(responseBody)
+                .optJSONArray("choices")
+                ?.optJSONObject(0)
+                ?.optJSONObject("message")
+                ?.optString("content")
+                ?.takeIf(String::isNotBlank)
+                ?: throw IOException("API không trả về nội dung phân tích")
+            val modelJson = normalizeJsonObject(modelOutput)
             val parsed = JSONObject(modelJson)
             val transactionTimeText = if (includeTransactionTime && !parsed.isNull("transaction_time")) {
                 parsed.optString("transaction_time").trim().takeIf(String::isNotEmpty)
@@ -97,10 +115,14 @@ internal class OpenAiClient {
             }
             return ExtractedDraftEntity(
                 notificationId = notification.id,
-                direction = parsed.getString("direction"),
+                direction = parsed.optString("direction")
+                    .takeIf { it in setOf("income", "expense", "unknown") }
+                    ?: "unknown",
                 amount = if (parsed.isNull("amount")) null else parsed.getLong("amount"),
-                purpose = parsed.getString("purpose").trim(),
-                recipient = parsed.getString("recipient").trim(),
+                purpose = parsed.optString("purpose").trim(),
+                recipient = parsed.optString("recipient")
+                    .ifBlank { parsed.optString("recipent") }
+                    .trim(),
                 transactionTime = transactionTimeText?.let(::parseTransactionTime),
                 rawModelJson = modelJson,
             )
@@ -109,23 +131,7 @@ internal class OpenAiClient {
         }
     }
 
-    private fun extractOutputText(response: JSONObject): String? {
-        val output = response.optJSONArray("output") ?: return null
-        for (outputIndex in 0 until output.length()) {
-            val item = output.optJSONObject(outputIndex) ?: continue
-            val content = item.optJSONArray("content") ?: continue
-            for (contentIndex in 0 until content.length()) {
-                val block = content.optJSONObject(contentIndex) ?: continue
-                if (block.optString("type") == "output_text") {
-                    return block.optString("text").takeIf(String::isNotBlank)
-                }
-            }
-        }
-        return null
-    }
-
     private fun responseFormat(includeTransactionTime: Boolean): JSONObject = JSONObject().apply {
-        put("type", "json_schema")
         put("name", if (includeTransactionTime) "screen_transaction_extraction" else "transaction_extraction")
         put("strict", true)
         put("schema", JSONObject().apply {
@@ -159,6 +165,26 @@ internal class OpenAiClient {
             if (includeTransactionTime) required += "transaction_time"
             put("required", JSONArray(required))
         })
+    }
+
+    private fun normalizeJsonObject(output: String): String {
+        val trimmed = output.trim()
+        val withoutFence = if (trimmed.startsWith("```")) {
+            trimmed
+                .substringAfter('\n', missingDelimiterValue = trimmed)
+                .substringBeforeLast("```", missingDelimiterValue = trimmed)
+                .trim()
+        } else {
+            trimmed
+        }
+        val candidate = withoutFence
+            .substring(withoutFence.indexOf('{').coerceAtLeast(0))
+            .let { value ->
+                val closingBrace = value.lastIndexOf('}')
+                if (closingBrace >= 0) value.substring(0, closingBrace + 1) else value
+            }
+        return runCatching { JSONObject(candidate).toString() }
+            .getOrElse { throw IOException("Model không trả về JSON hợp lệ") }
     }
 
     private fun parseTransactionTime(value: String): Long? {
@@ -196,8 +222,4 @@ internal class OpenAiClient {
 
     private fun enum(vararg values: String) =
         JSONObject().put("type", "string").put("enum", JSONArray(values.toList()))
-
-    companion object {
-        private const val RESPONSES_URL = "https://api.openai.com/v1/responses"
-    }
 }

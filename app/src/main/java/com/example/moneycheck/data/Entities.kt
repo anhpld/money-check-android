@@ -27,6 +27,8 @@ data class CapturedNotificationEntity(
     val postedAt: Long,
     val capturedAt: Long = System.currentTimeMillis(),
     val isSaved: Boolean = false,
+    val isAutoMatched: Boolean = false,
+    val autoMatchedAt: Long? = null,
     val analysisStatus: String = AnalysisStatus.PENDING,
     val handled: Boolean = false,
     val errorMessage: String? = null,

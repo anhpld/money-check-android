@@ -7,9 +7,10 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import java.util.UUID
 
 object NotificationAnalysisScheduler {
-    fun enqueue(context: Context, notificationId: Long) {
+    fun enqueue(context: Context, notificationId: Long): UUID {
         val request = OneTimeWorkRequestBuilder<AnalyzeNotificationWorker>()
             .setInputData(Data.Builder().putLong(AnalyzeNotificationWorker.KEY_NOTIFICATION_ID, notificationId).build())
             .setConstraints(
@@ -23,5 +24,6 @@ object NotificationAnalysisScheduler {
             ExistingWorkPolicy.REPLACE,
             request,
         )
+        return request.id
     }
 }

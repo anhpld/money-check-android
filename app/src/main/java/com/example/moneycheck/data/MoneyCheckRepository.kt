@@ -23,11 +23,13 @@ class MoneyCheckRepository private constructor(context: Context) {
     private val _notifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
     private val _inboxNotifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
     private val _savedNotifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
+    private val _autoMatchedNotifications = MutableStateFlow<List<NotificationWithDraft>>(emptyList())
     private val _transactions = MutableStateFlow<List<TransactionEntity>>(emptyList())
 
     val notifications = _notifications.asStateFlow()
     val inboxNotifications = _inboxNotifications.asStateFlow()
     val savedNotifications = _savedNotifications.asStateFlow()
+    val autoMatchedNotifications = _autoMatchedNotifications.asStateFlow()
     val transactions = _transactions.asStateFlow()
 
     init {
@@ -79,6 +81,8 @@ class MoneyCheckRepository private constructor(context: Context) {
             postedAt = now,
             capturedAt = now,
             isSaved = false,
+            isAutoMatched = false,
+            autoMatchedAt = null,
             analysisStatus = AnalysisStatus.PENDING,
             handled = false,
             errorMessage = null,
@@ -102,9 +106,50 @@ class MoneyCheckRepository private constructor(context: Context) {
         refreshNotifications()
     }
 
+    suspend fun markAutoMatched(id: Long, matchedAt: Long = System.currentTimeMillis()) = io {
+        helper.writableDatabase.update(
+            "captured_notifications",
+            ContentValues().apply {
+                put("isAutoMatched", 1)
+                put("autoMatchedAt", matchedAt)
+            },
+            "id = ?",
+            arrayOf(id.toString()),
+        )
+        refreshNotifications()
+    }
+
+    suspend fun removeAutoMatched(id: Long) = io {
+        helper.writableDatabase.update(
+            "captured_notifications",
+            ContentValues().apply {
+                put("isAutoMatched", 0)
+                putNull("autoMatchedAt")
+            },
+            "id = ?",
+            arrayOf(id.toString()),
+        )
+        refreshNotifications()
+    }
+
+    suspend fun clearAutoMatched() = io {
+        helper.writableDatabase.update(
+            "captured_notifications",
+            ContentValues().apply {
+                put("isAutoMatched", 0)
+                putNull("autoMatchedAt")
+            },
+            "isAutoMatched = 1",
+            null,
+        )
+        refreshNotifications()
+    }
+
     suspend fun deleteNotification(id: Long) = io {
         val notification = loadNotification(id)?.notification
-        if (notification?.isSaved == true && notification.analysisStatus == AnalysisStatus.READY) {
+        if (notification?.isSaved == true &&
+            (notification.analysisStatus == AnalysisStatus.READY || notification.isAutoMatched)
+        ) {
             helper.writableDatabase.update(
                 "captured_notifications",
                 ContentValues().apply { put("isSaved", 0) },
@@ -216,7 +261,7 @@ class MoneyCheckRepository private constructor(context: Context) {
     suspend fun clearInbox() = io {
         helper.writableDatabase.delete(
             "captured_notifications",
-            "isSaved = 0 AND analysisStatus != ?",
+            "isSaved = 0 AND isAutoMatched = 0 AND analysisStatus != ?",
             arrayOf(AnalysisStatus.READY),
         )
         refreshNotifications()
@@ -227,10 +272,10 @@ class MoneyCheckRepository private constructor(context: Context) {
             update(
                 "captured_notifications",
                 ContentValues().apply { put("isSaved", 0) },
-                "isSaved = 1 AND analysisStatus = ?",
+                "isSaved = 1 AND (analysisStatus = ? OR isAutoMatched = 1)",
                 arrayOf(AnalysisStatus.READY),
             )
-            delete("captured_notifications", "isSaved = 1", null)
+            delete("captured_notifications", "isSaved = 1 AND isAutoMatched = 0", null)
         }
         refreshNotifications()
     }
@@ -312,11 +357,12 @@ class MoneyCheckRepository private constructor(context: Context) {
             arrayOf(cutoff.toString(), "${ScreenCaptureSessionStore.EVENT_PREFIX}%"),
         )
         _savedNotifications.value = loadNotifications("isSaved = 1", null)
+        _autoMatchedNotifications.value = loadNotifications("isAutoMatched = 1", null)
         val pendingConfirmations = loadNotifications(
             "analysisStatus = ?",
             arrayOf(AnalysisStatus.READY),
         )
-        _notifications.value = (_savedNotifications.value + _inboxNotifications.value + pendingConfirmations)
+        _notifications.value = (_savedNotifications.value + _autoMatchedNotifications.value + _inboxNotifications.value + pendingConfirmations)
             .distinctBy { it.notification.id }
             .sortedByDescending { it.notification.capturedAt }
     }
@@ -338,7 +384,7 @@ class MoneyCheckRepository private constructor(context: Context) {
         val cutoff = System.currentTimeMillis() - INBOX_RETENTION_MILLIS
         helper.writableDatabase.delete(
             "captured_notifications",
-            "isSaved = 0 AND capturedAt < ? AND analysisStatus != ?",
+            "isSaved = 0 AND isAutoMatched = 0 AND capturedAt < ? AND analysisStatus != ?",
             arrayOf(cutoff.toString(), AnalysisStatus.READY),
         )
     }
@@ -424,6 +470,8 @@ class MoneyCheckRepository private constructor(context: Context) {
         put("postedAt", postedAt)
         put("capturedAt", capturedAt)
         put("isSaved", if (isSaved) 1 else 0)
+        put("isAutoMatched", if (isAutoMatched) 1 else 0)
+        if (autoMatchedAt == null) putNull("autoMatchedAt") else put("autoMatchedAt", autoMatchedAt)
         put("analysisStatus", analysisStatus)
         put("handled", if (handled) 1 else 0)
         put("errorMessage", errorMessage)
@@ -466,6 +514,8 @@ class MoneyCheckRepository private constructor(context: Context) {
         postedAt = long("postedAt"),
         capturedAt = long("capturedAt"),
         isSaved = int("isSaved") == 1,
+        isAutoMatched = int("isAutoMatched") == 1,
+        autoMatchedAt = if (isNull(column("autoMatchedAt"))) null else long("autoMatchedAt"),
         analysisStatus = string("analysisStatus"),
         handled = int("handled") == 1,
         errorMessage = nullableString("errorMessage"),
@@ -514,7 +564,7 @@ class MoneyCheckRepository private constructor(context: Context) {
     }
 }
 
-private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, 9) {
+private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, 10) {
     override fun onConfigure(database: SQLiteDatabase) {
         super.onConfigure(database)
         database.setForeignKeyConstraintsEnabled(true)
@@ -536,6 +586,8 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
                 postedAt INTEGER NOT NULL,
                 capturedAt INTEGER NOT NULL,
                 isSaved INTEGER NOT NULL DEFAULT 0,
+                isAutoMatched INTEGER NOT NULL DEFAULT 0,
+                autoMatchedAt INTEGER,
                 analysisStatus TEXT NOT NULL,
                 handled INTEGER NOT NULL,
                 errorMessage TEXT
@@ -712,6 +764,10 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
         }
         if (oldVersion < 9) {
             database.execSQL("ALTER TABLE extracted_drafts ADD COLUMN transactionTime INTEGER")
+        }
+        if (oldVersion < 10) {
+            database.execSQL("ALTER TABLE captured_notifications ADD COLUMN isAutoMatched INTEGER NOT NULL DEFAULT 0")
+            database.execSQL("ALTER TABLE captured_notifications ADD COLUMN autoMatchedAt INTEGER")
         }
     }
 }

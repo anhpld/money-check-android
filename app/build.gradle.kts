@@ -21,9 +21,12 @@ android {
 
     buildTypes {
         release {
+            // Keep local release builds installable while still running the full
+            // production R8 pipeline. Replace this with a private release key
+            // before publishing to an app store.
             signingConfig = signingConfigs.getByName("debug")
             optimization {
-                enable = false
+                enable = true
             }
         }
     }

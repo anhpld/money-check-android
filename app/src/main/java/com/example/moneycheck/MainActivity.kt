@@ -178,7 +178,7 @@ class MainActivity : ComponentActivity() {
         }
         val appSettings = AppSettings.get(this)
         if (appSettings.apiKey().isNullOrBlank()) {
-            Toast.makeText(this, "Chưa cấu hình OpenAI API key", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Chưa cấu hình API key", Toast.LENGTH_LONG).show()
             return
         }
         ScreenCaptureSessionStore(this).start()

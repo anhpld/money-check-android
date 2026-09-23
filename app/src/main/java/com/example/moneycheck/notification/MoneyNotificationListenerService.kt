@@ -20,12 +20,14 @@ class MoneyNotificationListenerService : NotificationListenerService() {
         val captured = NotificationContentExtractor.extract(this, sbn) ?: return
 
         serviceScope.launch {
-            val id = MoneyCheckRepository.get(this@MoneyNotificationListenerService).capture(captured)
-            if (id > 0 && AppSettings.get(this@MoneyNotificationListenerService).shouldAutoAnalyze(
+            val repository = MoneyCheckRepository.get(this@MoneyNotificationListenerService)
+            val id = repository.capture(captured)
+            val shouldAutoAnalyze = id > 0 && AppSettings.get(this@MoneyNotificationListenerService).shouldAutoAnalyze(
                     packageName = sbn.packageName,
                     notificationTitle = captured.title,
                 )
-            ) {
+            if (shouldAutoAnalyze) {
+                repository.markAutoMatched(id)
                 NotificationAnalysisScheduler.enqueue(this@MoneyNotificationListenerService, id)
             }
         }

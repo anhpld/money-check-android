@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -57,24 +59,31 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDateRangePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.StarBorder
@@ -95,8 +104,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -107,6 +118,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.graphics.drawable.toBitmap
 import com.example.moneycheck.MainViewModel
 import com.example.moneycheck.OpenAiConnectionState
+import com.example.moneycheck.ChatState
+import com.example.moneycheck.RetestState
 import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import com.example.moneycheck.data.AnalysisStatus
 import com.example.moneycheck.data.NotificationWithDraft
@@ -133,8 +146,10 @@ private enum class MainTab(
     val unselectedIcon: ImageVector,
 ) {
     TRANSACTIONS("Tổng quan", Icons.Filled.BarChart, Icons.Outlined.BarChart),
+    CHAT("Chat", Icons.AutoMirrored.Filled.Chat, Icons.AutoMirrored.Outlined.Chat),
     PENDING("Xác nhận", Icons.Filled.Schedule, Icons.Outlined.Schedule),
     INBOX("Hộp thư", Icons.Filled.Inbox, Icons.Outlined.Inbox),
+    AUTO_MATCHED("Đã bắt", Icons.Filled.Notifications, Icons.Outlined.Notifications),
     SAVED("Đã lưu", Icons.Filled.Star, Icons.Outlined.StarBorder),
     SETTINGS("Cài đặt", Icons.Filled.Settings, Icons.Outlined.Settings),
 }
@@ -160,11 +175,14 @@ fun MoneyCheckApp(
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val inboxNotifications by viewModel.inboxNotifications.collectAsStateWithLifecycle()
     val savedNotifications by viewModel.savedNotifications.collectAsStateWithLifecycle()
+    val autoMatchedNotifications by viewModel.autoMatchedNotifications.collectAsStateWithLifecycle()
     val transactions by viewModel.transactions.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
     val confirmationId by viewModel.confirmationId.collectAsStateWithLifecycle()
     val openAiConnection by viewModel.openAiConnection.collectAsStateWithLifecycle()
+    val chatState by viewModel.chatState.collectAsStateWithLifecycle()
+    val retestStates by viewModel.retestStates.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.TRANSACTIONS) }
     val pendingConfirmations = remember(notifications) {
         notifications.filter {
@@ -230,6 +248,14 @@ fun MoneyCheckApp(
                 modifier = Modifier.padding(innerPadding),
             )
 
+            MainTab.CHAT -> ChatScreen(
+                state = chatState,
+                transactionCount = transactions.size,
+                onSend = viewModel::sendChatMessage,
+                onClear = viewModel::clearChat,
+                modifier = Modifier.padding(innerPadding),
+            )
+
             MainTab.PENDING -> PendingConfirmationScreen(
                 notifications = pendingConfirmations,
                 onReview = viewModel::requestConfirmation,
@@ -250,9 +276,18 @@ fun MoneyCheckApp(
 
             MainTab.SAVED -> SavedNotificationScreen(
                 notifications = savedNotifications,
+                retestStates = retestStates,
                 onTest = viewModel::testNotification,
                 onDelete = viewModel::deleteNotification,
                 onClear = viewModel::clearSavedNotifications,
+                modifier = Modifier.padding(innerPadding),
+            )
+
+            MainTab.AUTO_MATCHED -> AutoMatchedNotificationScreen(
+                notifications = autoMatchedNotifications,
+                onReview = viewModel::requestConfirmation,
+                onRemove = viewModel::removeAutoMatchedNotification,
+                onClear = viewModel::clearAutoMatchedNotifications,
                 modifier = Modifier.padding(innerPadding),
             )
 
@@ -295,6 +330,154 @@ fun MoneyCheckApp(
                 )
             },
         )
+    }
+}
+
+@Composable
+private fun ChatScreen(
+    state: ChatState,
+    transactionCount: Int,
+    onSend: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var input by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+
+    fun send() {
+        val question = input.trim()
+        if (question.isEmpty() || state.isSending) return
+        onSend(question)
+        input = ""
+        focusManager.clearFocus()
+    }
+
+    LaunchedEffect(state.messages.lastOrNull()?.content?.length, state.isSending) {
+        if (state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.lastIndex)
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .imePadding(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            PageHeader(
+                eyebrow = "Moneycheck AI",
+                title = "Chat dữ liệu",
+                subtitle = "$transactionCount giao dịch đã lưu",
+                modifier = Modifier.weight(1f),
+                eyebrowPill = false,
+            )
+            if (state.messages.isNotEmpty()) {
+                TextButton(onClick = onClear, enabled = !state.isSending) { Text("Xóa chat") }
+            }
+        }
+
+        HorizontalDivider()
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (state.messages.isEmpty()) {
+                item {
+                    EmptyStateCard(
+                        symbol = "✦",
+                        title = if (transactionCount == 0) "Chưa có dữ liệu để chat" else "Hỏi về dòng tiền của bạn",
+                        description = if (transactionCount == 0) {
+                            "Hãy thêm hoặc xác nhận giao dịch trước."
+                        } else {
+                            "Ví dụ: Tháng này tôi đã chi bao nhiêu? Khoản nào lớn nhất? Tôi thường trả tiền cho ai?"
+                        },
+                    )
+                }
+            }
+            items(state.messages, key = { it.id }) { message ->
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = if (message.role == "user") Alignment.CenterEnd else Alignment.CenterStart,
+                ) {
+                    Surface(
+                        color = if (message.role == "user") {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth(0.86f),
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                message.content,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                color = if (message.role == "user") {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            if (state.isSending) {
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text("Đang phân tích dữ liệu…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            state.errorMessage?.let { message ->
+                item { InlineMessage(message, error = true) }
+            }
+        }
+
+        Surface(tonalElevation = 3.dp) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Hỏi về giao dịch…") },
+                    enabled = !state.isSending && transactionCount > 0,
+                    minLines = 1,
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { send() }),
+                    shape = RoundedCornerShape(22.dp),
+                )
+                IconButton(
+                    onClick = { send() },
+                    enabled = input.isNotBlank() && !state.isSending && transactionCount > 0,
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "Gửi")
+                }
+            }
+        }
     }
 }
 
@@ -1217,7 +1400,13 @@ private fun TransactionEditorSheet(
         mutableStateOf(transaction?.packageName.isNullOrBlank())
     }
     var selectedEpochDay by remember(transaction?.id) { mutableStateOf(initialTime.toLocalDate().toEpochDay()) }
+    val initialLocalTime = remember(transaction?.id) {
+        Instant.ofEpochMilli(initialTime).atZone(ZoneId.systemDefault()).toLocalTime()
+    }
+    var selectedHour by remember(transaction?.id) { mutableStateOf(initialLocalTime.hour) }
+    var selectedMinute by remember(transaction?.id) { mutableStateOf(initialLocalTime.minute) }
     var showDatePicker by rememberSaveable(transaction?.id) { mutableStateOf(false) }
+    var showTimePicker by rememberSaveable(transaction?.id) { mutableStateOf(false) }
     val parsedAmount = amount.toLongOrNull()
     val appResults = remember(installedApps, appQuery, selectedPackageName) {
         val query = appQuery.trim()
@@ -1373,10 +1562,20 @@ private fun TransactionEditorSheet(
                     label = { Text("Mục đích / nội dung") },
                     minLines = 2,
                 )
-                OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.DateRange, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Ngày giao dịch: ${formatEpochDay(selectedEpochDay)}")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Outlined.DateRange, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(formatEpochDay(selectedEpochDay))
+                    }
+                    OutlinedButton(onClick = { showTimePicker = true }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Outlined.Schedule, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(String.format(Locale.ROOT, "%02d:%02d", selectedHour, selectedMinute))
+                    }
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
@@ -1402,7 +1601,11 @@ private fun TransactionEditorSheet(
                             requireNotNull(parsedAmount),
                             recipient.trim(),
                             purpose.trim(),
-                            replaceDateKeepingTime(initialTime, selectedEpochDay),
+                            replaceTimeKeepingDate(
+                                replaceDateKeepingTime(initialTime, selectedEpochDay),
+                                selectedHour,
+                                selectedMinute,
+                            ),
                         )
                     },
                     modifier = Modifier.weight(1f),
@@ -1434,6 +1637,31 @@ private fun TransactionEditorSheet(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = selectedHour,
+            initialMinute = selectedMinute,
+            is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("Chọn giờ giao dịch") },
+            text = { TimePicker(state = timePickerState) },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Hủy") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedHour = timePickerState.hour
+                        selectedMinute = timePickerState.minute
+                        showTimePicker = false
+                    },
+                ) { Text("Chọn") }
+            },
+        )
     }
 }
 
@@ -1727,6 +1955,7 @@ private fun NotificationInboxScreen(
 @Composable
 private fun SavedNotificationScreen(
     notifications: List<NotificationWithDraft>,
+    retestStates: Map<Long, RetestState>,
     onTest: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onClear: () -> Unit,
@@ -1776,10 +2005,15 @@ private fun SavedNotificationScreen(
             }
         } else {
             items(notifications, key = { it.notification.id }) { item ->
+                val retestState = retestStates[item.notification.id] ?: RetestState()
                 NotificationCard(
                     item = item,
                     actionLabel = "Test lại",
                     onAction = { onTest(item.notification.id) },
+                    actionEnabled = !retestState.isLoading,
+                    actionLoading = retestState.isLoading,
+                    actionMessage = retestState.message,
+                    actionMessageIsError = retestState.isError,
                     onDelete = { notificationToDelete = item },
                     showStatus = false,
                 )
@@ -1814,15 +2048,112 @@ private fun SavedNotificationScreen(
 }
 
 @Composable
+private fun AutoMatchedNotificationScreen(
+    notifications: List<NotificationWithDraft>,
+    onReview: (Long) -> Unit,
+    onRemove: (Long) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var notificationToRemove by remember { mutableStateOf<NotificationWithDraft?>(null) }
+    var showClearConfirmation by remember { mutableStateOf(false) }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            PageHeader(
+                eyebrow = "Moneycheck",
+                title = "Đã bắt tự động",
+                subtitle = "Notification đã match rule, được giữ lại trước khi gọi AI.",
+                eyebrowPill = false,
+            )
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeader(
+                    title = "Nhật ký đầu vào",
+                    trailing = "${notifications.size} mục",
+                    subtitle = "Bản gốc vẫn còn kể cả khi API hoặc model phân tích lỗi",
+                )
+                if (notifications.isNotEmpty()) {
+                    CompactListAction(
+                        title = "Dọn nhật ký tự động",
+                        description = "Bỏ toàn bộ notification khỏi danh sách Đã bắt",
+                        actionLabel = "Xóa tất cả",
+                        danger = true,
+                        onClick = { showClearConfirmation = true },
+                    )
+                }
+            }
+        }
+        if (notifications.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    symbol = "◎",
+                    title = "Chưa bắt được notification nào",
+                    description = "Notification match package và title trong Cài đặt sẽ tự xuất hiện tại đây trước khi gọi AI.",
+                )
+            }
+        } else {
+            items(notifications, key = { it.notification.id }) { item ->
+                val canReview = item.notification.analysisStatus == AnalysisStatus.READY && item.draft != null
+                NotificationCard(
+                    item = item,
+                    actionLabel = if (canReview) "Xem kết quả" else "Đã lưu",
+                    onAction = { if (canReview) onReview(item.notification.id) },
+                    actionEnabled = canReview,
+                    onDelete = { notificationToRemove = item },
+                    deleteLabel = "Bỏ khỏi Đã bắt",
+                    timestamp = item.notification.autoMatchedAt,
+                )
+            }
+        }
+    }
+
+    notificationToRemove?.let { item ->
+        DeleteConfirmationDialog(
+            title = "Bỏ khỏi nhật ký Đã bắt?",
+            message = "Notification này sẽ không còn trong tab Đã bắt. Giao dịch và kết quả đã tạo không bị xóa.",
+            confirmLabel = "Bỏ khỏi danh sách",
+            onDismiss = { notificationToRemove = null },
+            onConfirm = {
+                onRemove(item.notification.id)
+                notificationToRemove = null
+            },
+        )
+    }
+    if (showClearConfirmation) {
+        DeleteConfirmationDialog(
+            title = "Dọn toàn bộ nhật ký Đã bắt?",
+            message = "Các giao dịch và kết quả phân tích đã tạo vẫn được giữ nguyên.",
+            confirmLabel = "Xóa tất cả",
+            onDismiss = { showClearConfirmation = false },
+            onConfirm = {
+                onClear()
+                showClearConfirmation = false
+            },
+        )
+    }
+}
+
+@Composable
 private fun NotificationCard(
     item: NotificationWithDraft,
     actionLabel: String,
     onAction: () -> Unit,
     actionEnabled: Boolean = true,
+    actionLoading: Boolean = false,
+    actionMessage: String? = null,
+    actionMessageIsError: Boolean = false,
     onDelete: (() -> Unit)? = null,
+    deleteLabel: String = "Xóa notification",
     onAddConfig: (() -> Unit)? = null,
     temporary: Boolean = false,
     showStatus: Boolean = true,
+    timestamp: Long? = null,
 ) {
     var showRaw by rememberSaveable(item.notification.id) { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -1848,7 +2179,7 @@ private fun NotificationCard(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "${notification.appName} · ${formatDateTime(notification.postedAt)}",
+                            "${notification.appName} · ${formatDateTime(timestamp ?: notification.postedAt)}",
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1903,7 +2234,7 @@ private fun NotificationCard(
                         }
                         if (onDelete != null) {
                             DropdownMenuItem(
-                                text = { Text("Xóa notification", color = MaterialTheme.colorScheme.error) },
+                            text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
                                 leadingIcon = {
                                     Icon(
                                         Icons.Outlined.Delete,
@@ -1923,6 +2254,7 @@ private fun NotificationCard(
             if (showStatus) {
                 notification.errorMessage?.let { InlineMessage(it, error = true) }
             }
+            actionMessage?.let { InlineMessage(it, error = actionMessageIsError) }
             if (showRaw) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
                     Text(notification.rawPayload, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
@@ -1941,9 +2273,17 @@ private fun NotificationCard(
                 Spacer(Modifier.width(10.dp))
                 Button(
                     onClick = onAction,
-                    enabled = actionEnabled,
+                    enabled = actionEnabled && !actionLoading,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                ) { Text(actionLabel) }
+                ) {
+                    if (actionLoading) {
+                        CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Đang test")
+                    } else {
+                        Text(actionLabel)
+                    }
+                }
             }
         }
     }
@@ -2018,14 +2358,15 @@ private fun SettingsScreen(
     onRequestPostNotifications: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onOpenScreenCaptureAccess: () -> Unit,
-    onValidateApiKey: (String) -> Unit,
+    onValidateApiKey: (String, String) -> Unit,
     onApiKeyChanged: () -> Unit,
     onEnsureModelsLoaded: () -> Unit,
-    onSave: (String, String, String, Map<String, Set<String>>, Map<String, String>, Boolean) -> Boolean,
+    onSave: (String, String, String, String, Map<String, Set<String>>, Map<String, String>, Boolean) -> Boolean,
     onClearApiKey: () -> Unit,
     onExportDatabase: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var apiBaseUrl by rememberSaveable { mutableStateOf(settings.apiBaseUrl) }
     var model by rememberSaveable { mutableStateOf(settings.model) }
     var prompt by rememberSaveable { mutableStateOf(settings.prompt) }
     var apiKey by rememberSaveable { mutableStateOf("") }
@@ -2041,6 +2382,7 @@ private fun SettingsScreen(
     var promptEditorTarget by remember { mutableStateOf<PromptEditorTarget?>(null) }
 
     LaunchedEffect(settings) {
+        apiBaseUrl = settings.apiBaseUrl
         model = settings.model
         prompt = settings.prompt
         notificationRuleInputs = settings.notificationRules
@@ -2081,8 +2423,9 @@ private fun SettingsScreen(
             .take(8)
     }
     val canSave = model.isNotBlank() &&
+        apiBaseUrl.isNotBlank() &&
         (settings.hasApiKey || apiKey.isNotBlank()) &&
-        (apiKey.isBlank() || openAiConnection.isVerified)
+        ((apiKey.isBlank() && apiBaseUrl.trim().trimEnd('/') == settings.apiBaseUrl) || openAiConnection.isVerified)
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -2100,7 +2443,7 @@ private fun SettingsScreen(
                     PageHeader(
                         eyebrow = "Moneycheck",
                         title = "Cài đặt",
-                        subtitle = "Quyền, OpenAI và các prompt phân tích",
+                        subtitle = "Quyền, AI và các prompt phân tích",
                         modifier = Modifier.weight(1f),
                         eyebrowPill = false,
                     )
@@ -2110,7 +2453,7 @@ private fun SettingsScreen(
                             val rules = notificationRuleInputs.mapValues { (_, input) ->
                                 input.lineSequence().map(String::trim).filter(String::isNotEmpty).toSet()
                             }
-                            saved = onSave(model, prompt, apiKey, rules, screenPromptInputs, overlayEnabled)
+                            saved = onSave(apiBaseUrl, model, prompt, apiKey, rules, screenPromptInputs, overlayEnabled)
                             if (saved) apiKey = ""
                         },
                         enabled = canSave,
@@ -2174,10 +2517,24 @@ private fun SettingsScreen(
 
         item {
             SettingsSection(
-                title = "OpenAI",
-                subtitle = "Kết nối model và điều chỉnh cách phân tích.",
+                title = "AI tương thích OpenAI",
+                subtitle = "Dùng OpenAI, 9router hoặc dịch vụ có API tương thích.",
                 modifier = Modifier.padding(horizontal = 18.dp),
             ) {
+                OutlinedTextField(
+                    value = apiBaseUrl,
+                    onValueChange = {
+                        apiBaseUrl = it
+                        saved = false
+                        onApiKeyChanged()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("API base URL") },
+                    placeholder = { Text("http://localhost:20128") },
+                    supportingText = { Text("Chấp nhận URL gốc hoặc URL có /v1; ứng dụng tự nối endpoint") },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                )
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = {
@@ -2187,15 +2544,15 @@ private fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("API key") },
-                    placeholder = { Text(if (settings.hasApiKey) "Đã lưu •••• · để trống để giữ nguyên" else "sk-...") },
+                    placeholder = { Text(if (settings.hasApiKey) "Đã lưu •••• · để trống để giữ nguyên" else "API key") },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     shape = MaterialTheme.shapes.medium,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(
-                        onClick = { onValidateApiKey(apiKey) },
-                        enabled = !openAiConnection.isChecking && (apiKey.isNotBlank() || settings.hasApiKey),
+                        onClick = { onValidateApiKey(apiBaseUrl, apiKey) },
+                        enabled = !openAiConnection.isChecking && apiBaseUrl.isNotBlank() && (apiKey.isNotBlank() || settings.hasApiKey),
                     ) {
                         if (openAiConnection.isChecking) {
                             CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
@@ -2350,7 +2707,7 @@ private fun SettingsScreen(
                     shape = MaterialTheme.shapes.medium,
                 )
                 Text(
-                    "App không được chọn vẫn xuất hiện trong Hộp thư 24 giờ, nhưng không tự gọi OpenAI và không bật bảng xác nhận.",
+                    "App không được chọn vẫn xuất hiện trong Hộp thư 24 giờ, nhưng không tự gọi AI và không bật bảng xác nhận.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -2868,6 +3225,9 @@ internal fun TransactionConfirmationDialog(
     var showTransactionDatePicker by rememberSaveable(item.notification.id, draft.analyzedAt) {
         mutableStateOf(false)
     }
+    var showTransactionTimePicker by rememberSaveable(item.notification.id, draft.analyzedAt) {
+        mutableStateOf(false)
+    }
     var showLlmInput by rememberSaveable(item.notification.id, draft.analyzedAt) { mutableStateOf(false) }
     val isManualScreen = ScreenCaptureSessionStore.isManualScreenEvent(item.notification.eventId)
     val llmInput = remember(item.notification.rawPayload, item.notification.expandedContent, draft.rawModelJson) {
@@ -2968,13 +3328,26 @@ internal fun TransactionConfirmationDialog(
                     minLines = 2,
                     shape = MaterialTheme.shapes.medium,
                 )
-                OutlinedButton(
-                    onClick = { showTransactionDatePicker = true },
+                Row(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(Icons.Outlined.DateRange, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Ngày thanh toán: ${formatDateTime(transactionTime)}")
+                    OutlinedButton(
+                        onClick = { showTransactionDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Outlined.DateRange, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(formatEpochDay(transactionTime.toLocalDate().toEpochDay()))
+                    }
+                    OutlinedButton(
+                        onClick = { showTransactionTimePicker = true },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Outlined.Schedule, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(formatTime(transactionTime))
+                    }
                 }
                 if (draft.transactionTime == null) {
                     Text(
@@ -3051,6 +3424,37 @@ internal fun TransactionConfirmationDialog(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (showTransactionTimePicker) {
+        val localDateTime = remember(transactionTime) {
+            Instant.ofEpochMilli(transactionTime).atZone(ZoneId.systemDefault())
+        }
+        val timePickerState = rememberTimePickerState(
+            initialHour = localDateTime.hour,
+            initialMinute = localDateTime.minute,
+            is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { showTransactionTimePicker = false },
+            title = { Text("Chọn giờ thanh toán") },
+            text = { TimePicker(state = timePickerState) },
+            dismissButton = {
+                TextButton(onClick = { showTransactionTimePicker = false }) { Text("Hủy") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        transactionTime = replaceTimeKeepingDate(
+                            transactionTime,
+                            timePickerState.hour,
+                            timePickerState.minute,
+                        )
+                        showTransactionTimePicker = false
+                    },
+                ) { Text("Chọn") }
+            },
+        )
     }
 
     if (showLlmInput) {
@@ -3272,6 +3676,16 @@ private fun replaceDateKeepingTime(originalTimestamp: Long, epochDay: Long): Lon
     val originalTime = Instant.ofEpochMilli(originalTimestamp).atZone(zone).toLocalTime()
     return LocalDate.ofEpochDay(epochDay)
         .atTime(originalTime)
+        .atZone(zone)
+        .toInstant()
+        .toEpochMilli()
+}
+
+private fun replaceTimeKeepingDate(originalTimestamp: Long, hour: Int, minute: Int): Long {
+    val zone = ZoneId.systemDefault()
+    val originalDate = Instant.ofEpochMilli(originalTimestamp).atZone(zone).toLocalDate()
+    return originalDate
+        .atTime(hour, minute)
         .atZone(zone)
         .toInstant()
         .toEpochMilli()

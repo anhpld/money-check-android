@@ -27,8 +27,8 @@ class AnalyzeNotificationWorker(
         val settings = AppSettings.get(applicationContext)
         val apiKey = settings.apiKey()
         if (apiKey.isNullOrBlank()) {
-            repository.saveError(notificationId, "Chưa cấu hình OpenAI API key")
-            if (isManualScreen) showToast("Chưa cấu hình OpenAI API key")
+            repository.saveError(notificationId, "Chưa cấu hình API key")
+            if (isManualScreen) showToast("Chưa cấu hình API key")
             return Result.failure()
         }
 
@@ -43,6 +43,7 @@ class AnalyzeNotificationWorker(
             val draft = if (isManualScreen) {
                 OpenAiClient().analyzeScreen(
                     notification = notification,
+                    apiBaseUrl = settings.apiBaseUrl(),
                     apiKey = apiKey,
                     model = model,
                     prompt = screenPayload?.optString("prompt")?.takeIf(String::isNotBlank)
@@ -52,12 +53,14 @@ class AnalyzeNotificationWorker(
             } else {
                 OpenAiClient().analyze(
                     notification = notification,
+                    apiBaseUrl = settings.apiBaseUrl(),
                     apiKey = apiKey,
                     model = model,
                     prompt = settings.prompt(),
                 )
             }
             repository.saveAnalysis(notificationId, draft)
+            repository.removeAutoMatched(notificationId)
             if (isManualScreen || !AppVisibility.isForeground) {
                 ConfirmationNotifier.show(
                     applicationContext,
