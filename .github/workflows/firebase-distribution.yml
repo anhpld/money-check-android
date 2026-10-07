@@ -39,14 +39,29 @@ jobs:
         env:
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
           FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
-          echo "$FIREBASE_CREDENTIALS" > service-account.json
-          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/service-account.json"
-          firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
-            --app "$FIREBASE_APP_ID" \
-            --groups testers \
-            --release-notes "Cập nhật trợ lý AI với SQL tool calling và giao diện Lovable" || \
-          firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
-            --app "$FIREBASE_APP_ID" \
-            --release-notes "Cập nhật trợ lý AI với SQL tool calling và giao diện Lovable"
-          rm -f service-account.json
+          if [ -n "$FIREBASE_TOKEN" ]; then
+            echo "Deploying using FIREBASE_TOKEN..."
+            firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
+              --app "$FIREBASE_APP_ID" \
+              --token "$FIREBASE_TOKEN" \
+              --groups testers \
+              --release-notes "Cập nhật trợ lý AI với SQL tool calling và giao diện Lovable" || \
+            firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
+              --app "$FIREBASE_APP_ID" \
+              --token "$FIREBASE_TOKEN" \
+              --release-notes "Cập nhật trợ lý AI với SQL tool calling và giao diện Lovable"
+          else
+            echo "Deploying using Service Account JSON..."
+            echo "$FIREBASE_CREDENTIALS" > service-account.json
+            export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/service-account.json"
+            firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
+              --app "$FIREBASE_APP_ID" \
+              --groups testers \
+              --release-notes "Cập nhật trợ lý AI với SQL tool calling và giao diện Lovable" || \
+            firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
+              --app "$FIREBASE_APP_ID" \
+              --release-notes "Cập nhật trợ lý AI với SQL tool calling và giao diện Lovable"
+            rm -f service-account.json
+          fi
