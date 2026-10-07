@@ -123,7 +123,6 @@ import com.example.moneycheck.MainViewModel
 import com.example.moneycheck.OpenAiConnectionState
 import com.example.moneycheck.ChatState
 import com.example.moneycheck.RetestState
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import com.example.moneycheck.data.AnalysisStatus
 import com.example.moneycheck.data.NotificationWithDraft
 import com.example.moneycheck.data.TransactionEntity
@@ -145,7 +144,6 @@ import java.time.format.DateTimeFormatter
 
 internal val IncomeStrong = Color(0xFF087A55)
 private val AppIconCache = object : LruCache<String, ImageBitmap>(64) {}
-internal val KnownScreenPromptPackages = listOf("com.shopee.vn", "vn.com.vng.zalopay")
 
 @Composable
 internal fun PageHeader(
@@ -184,7 +182,6 @@ internal fun ManualAddMethodDialog(
     onDismiss: () -> Unit,
     onManualInput: () -> Unit,
     onPickImage: () -> Unit,
-    onReadScreen: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -219,175 +216,11 @@ internal fun ManualAddMethodDialog(
                         )
                     }
                 }
-                Surface(
-                    modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onReadScreen),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Đọc từ màn hình", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Tự nhận diện ứng dụng và điền thông tin từ nội dung đang mở.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
             }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Đóng") } },
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun ScreenReadSetupSheet(
-    installedApps: List<InstalledApp>,
-    savedPrompts: Map<String, String>,
-    onDismiss: () -> Unit,
-    onStart: (InstalledApp, String) -> Unit,
-) {
-    var query by rememberSaveable { mutableStateOf("") }
-    var selectedApp by remember { mutableStateOf<InstalledApp?>(null) }
-    var prompt by rememberSaveable { mutableStateOf("") }
-    val results = remember(installedApps, query, selectedApp) {
-        val normalized = query.trim()
-        if (normalized.isBlank()) emptyList() else installedApps.asSequence()
-            .filter { it.packageName != selectedApp?.packageName }
-            .filter { it.label.contains(normalized, true) || it.packageName.contains(normalized, true) }
-            .take(8)
-            .toList()
-    }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        sheetGesturesEnabled = false,
-        dragHandle = null,
-    ) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.92f).imePadding()) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) {
-                Text("Đọc giao dịch từ màn hình", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    "Chọn app và kiểm tra prompt trước khi bắt đầu.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                selectedApp?.let { app ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = MaterialTheme.shapes.medium,
-                    ) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            AppAvatar(app.label, app.packageName, size = 42)
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(app.label, style = MaterialTheme.typography.titleSmall)
-                                Text(
-                                    app.packageName,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            TextButton(onClick = {
-                                selectedApp = null
-                                prompt = ""
-                                query = ""
-                            }) { Text("Đổi") }
-                        }
-                    }
-                }
-
-                if (selectedApp == null) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Tìm ứng dụng") },
-                        placeholder = { Text("Tên app hoặc package") },
-                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                        singleLine = true,
-                    )
-                    when {
-                        query.isBlank() -> Text(
-                            "Nhập tên ứng dụng để bắt đầu tìm.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        results.isEmpty() -> InlineMessage("Không tìm thấy ứng dụng phù hợp", error = true)
-                        else -> results.forEach { app ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable {
-                                    selectedApp = app
-                                    prompt = savedPrompts[app.packageName]
-                                        ?: AppSettings.defaultScreenPrompt(app.packageName)
-                                    query = ""
-                                },
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = MaterialTheme.shapes.medium,
-                            ) {
-                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    AppAvatar(app.label, app.packageName, size = 40)
-                                    Spacer(Modifier.width(10.dp))
-                                    Column {
-                                        Text(app.label, style = MaterialTheme.typography.titleSmall)
-                                        Text(
-                                            app.packageName,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    OutlinedTextField(
-                        value = prompt,
-                        onValueChange = { prompt = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Prompt riêng cho ứng dụng") },
-                        minLines = 9,
-                        maxLines = 16,
-                        shape = MaterialTheme.shapes.medium,
-                    )
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Prompt được lưu theo package và có thể sửa lại ở lần sau.",
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        TextButton(onClick = {
-                            prompt = AppSettings.defaultScreenPrompt(requireNotNull(selectedApp).packageName)
-                        }) { Text("Mặc định") }
-                    }
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp).navigationBarsPadding(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Hủy") }
-                Button(
-                    onClick = { onStart(requireNotNull(selectedApp), prompt.trim()) },
-                    modifier = Modifier.weight(1f),
-                    enabled = selectedApp != null && prompt.isNotBlank(),
-                ) { Text("Mở ứng dụng") }
-            }
-        }
-    }
 }
 
 @Composable
@@ -1233,7 +1066,7 @@ internal fun LlmInputDetails(input: LlmInputSnapshot) {
                 if (input.title.isNotBlank()) LlmInputField("title", input.title)
                 if (input.text.isNotBlank()) LlmInputField("text", input.text)
                 if (input.expandedContent.isNotBlank()) {
-                    LlmInputField(if (input.source == ScreenCaptureSessionStore.SOURCE) "screen_xml" else "expanded_content", input.expandedContent)
+                    LlmInputField("expanded_content", input.expandedContent)
                 }
             }
         }

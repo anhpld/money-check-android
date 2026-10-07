@@ -5,7 +5,6 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -221,7 +220,6 @@ class MoneyCheckRepository private constructor(context: Context) {
         transactionTime: Long,
     ) = io {
         val draft = loadDraft(notification.id)
-        val isManualScreen = ScreenCaptureSessionStore.isManualScreenEvent(notification.eventId)
         helper.writableDatabase.inTransaction {
             insertOrThrow(
                 "transactions",
@@ -234,22 +232,16 @@ class MoneyCheckRepository private constructor(context: Context) {
                     put("purpose", purpose)
                     put("appName", notification.appName)
                     put("packageName", notification.packageName)
-                    put("sourceType", if (isManualScreen) TransactionSource.MANUAL else TransactionSource.AUTOMATIC)
+                    put("sourceType", TransactionSource.AUTOMATIC)
                     put("transactionTime", transactionTime)
                     put(
                         "llmInputJson",
-                        if (isManualScreen) {
-                            JSONObject(notification.rawPayload).apply {
-                                put("model_output", draft?.rawModelJson.orEmpty())
-                            }.toString()
-                        } else {
-                            JSONObject().apply {
-                                put("title", notification.title)
-                                put("text", notification.text)
-                                put("expanded_content", notification.expandedContent)
-                                put("model_output", draft?.rawModelJson.orEmpty())
-                            }.toString()
-                        },
+                        JSONObject().apply {
+                            put("title", notification.title)
+                            put("text", notification.text)
+                            put("expanded_content", notification.expandedContent)
+                            put("model_output", draft?.rawModelJson.orEmpty())
+                        }.toString(),
                     )
                     put("confirmedAt", System.currentTimeMillis())
                 },
@@ -355,8 +347,8 @@ class MoneyCheckRepository private constructor(context: Context) {
     private fun refreshNotifications() {
         val cutoff = System.currentTimeMillis() - INBOX_RETENTION_MILLIS
         _inboxNotifications.value = loadNotifications(
-            "isSaved = 0 AND capturedAt >= ? AND eventId NOT LIKE ?",
-            arrayOf(cutoff.toString(), "${ScreenCaptureSessionStore.EVENT_PREFIX}%"),
+            "isSaved = 0 AND capturedAt >= ?",
+            arrayOf(cutoff.toString()),
         )
         _savedNotifications.value = loadNotifications("isSaved = 1", null)
         _autoMatchedNotifications.value = loadNotifications("isAutoMatched = 1", null)

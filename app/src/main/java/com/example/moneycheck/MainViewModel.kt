@@ -346,12 +346,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveLocalPreferences(
         prompt: String,
         notificationRules: Map<String, Set<String>>,
-        screenPrompts: Map<String, String>,
         overlayEnabled: Boolean,
     ) {
         appSettings.savePrompt(prompt)
         appSettings.saveNotificationRules(notificationRules)
-        appSettings.saveScreenPrompts(screenPrompts)
         appSettings.saveOverlayEnabled(overlayEnabled)
         _settings.value = appSettings.snapshot()
     }

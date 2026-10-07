@@ -1,14 +1,14 @@
 # Money check Android
 
-Ứng dụng Android quản lý giao dịch cá nhân. Money check có thể đọc thông báo giao dịch, trích xuất dữ liệu bằng API tương thích OpenAI, yêu cầu người dùng xác nhận trước khi ghi vào sổ giao dịch, đồng thời hỗ trợ đọc giao dịch trực tiếp từ màn hình ứng dụng bằng Accessibility, OCR hoặc kết hợp cả hai.
+Ứng dụng Android quản lý giao dịch cá nhân. Money check có thể đọc thông báo giao dịch, trích xuất dữ liệu bằng API tương thích OpenAI và yêu cầu người dùng xác nhận trước khi ghi vào sổ giao dịch. Người dùng cũng có thể thêm giao dịch thủ công hoặc chọn ảnh giao dịch để AI trích xuất thông tin.
 
 > Ứng dụng đang ở giai đoạn phát triển. Không nên xem dữ liệu được AI trích xuất là chính xác tuyệt đối; hãy kiểm tra thông tin trước khi xác nhận giao dịch.
 
 ## Trạng thái mã nguồn
 
-README mô tả các luồng đã có trong mã nguồn, không phải cam kết mọi tính năng đã chạy thành công. Checkout hiện tại tham chiếu tới `OpenAiCompatibleEndpoint` và `TransactionChatClient` nhưng chưa có định nghĩa hai thành phần này trong source của repository. Cần bổ sung/khôi phục chúng trước khi xác nhận build và sử dụng đầy đủ API/chat.
+README mô tả các luồng đã có trong mã nguồn, không phải cam kết mọi tính năng đã chạy thành công.
 
-Khi kiểm tra README, lệnh `bash ./gradlew :app:testDebugUnitTest` dừng vì môi trường chưa có Java (`JAVA_HOME is not set`). Vì vậy chưa xác minh build, unit test hoặc hoạt động trên thiết bị. Các lệnh bên dưới là hướng dẫn cho môi trường đã cài đủ công cụ và mã nguồn đã được hoàn thiện.
+Đã chạy thành công `gradlew.bat :app:testDebugUnitTest :app:assembleDebug` trên checkout hiện tại. Chưa kiểm tra hoạt động trên thiết bị.
 
 ## Tính năng
 
@@ -20,15 +20,11 @@ Khi kiểm tra README, lệnh `bash ./gradlew :app:testDebugUnitTest` dừng vì
   - người nhận/bên thụ hưởng;
   - mục đích giao dịch.
 - **Xác nhận giao dịch** bằng giao diện trong ứng dụng, notification hoặc cửa sổ overlay.
-- **Đọc giao dịch từ màn hình** bằng:
-  - Accessibility XML;
-  - OCR trên thiết bị với ML Kit;
-  - Accessibility XML + OCR.
-- Có chế độ tự động nhận diện màn hình Shopee cho các mẫu giao dịch đã hỗ trợ.
 - Thêm và sửa giao dịch thủ công.
+- Chọn ảnh giao dịch hoặc biên lai để AI trích xuất thông tin trước khi lưu.
 - Tổng quan thu/chi, lọc theo khoảng ngày và xem danh sách giao dịch.
 - Chat với dữ liệu giao dịch hiện có qua API tương thích OpenAI.
-- Cấu hình prompt chung và prompt riêng theo từng ứng dụng.
+- Cấu hình prompt phân tích notification.
 - Kiểm tra API URL, API key và tải danh sách model từ endpoint `/models`.
 - Xuất cơ sở dữ liệu SQLite để sao lưu hoặc kiểm tra.
 - API key được mã hóa bằng Android Keystore với AES-GCM.
@@ -59,19 +55,13 @@ Hộp thư hiển thị notification chưa lưu trong **24 giờ** gần nhất.
 
 **Lưu ý:** lựa chọn ứng dụng/tiêu đề chỉ giới hạn việc tự động gửi đi phân tích, không giới hạn việc thu thập vào SQLite. Listener hiện lưu notification Android chuyển tới, trừ notification của chính Money check. Tiêu đề được so khớp toàn bộ sau khi bỏ khoảng trắng đầu/cuối, không phân biệt hoa thường; danh sách tiêu đề rỗng nghĩa là nhận mọi tiêu đề của ứng dụng đã chọn.
 
-### Đọc từ màn hình
-
-Người dùng bắt đầu phiên đọc màn hình trong tab tổng quan, mở ứng dụng cần đọc rồi nhấn nút nổi **Nhận diện**. Có thể chọn Accessibility, OCR hoặc chế độ kết hợp. Nội dung được làm sạch, đóng gói thành dữ liệu phân tích và gửi tới API đã cấu hình.
-
 ## Công nghệ
 
 - Kotlin
 - Jetpack Compose và Material 3
-- Android Accessibility Service
 - Android Notification Listener Service
 - WorkManager
 - SQLite thông qua `SQLiteOpenHelper`
-- Google ML Kit Text Recognition
 - Android Keystore
 - Gradle Kotlin DSL
 - API chat completions tương thích OpenAI
@@ -141,7 +131,7 @@ Thanh điều hướng chính tập trung vào bốn điểm đến: **Tổng qu
 
 Khi thêm giao dịch thủ công, biểu mẫu mặc định là **Tiền mặt**. Ứng dụng và người nhận chỉ là thông tin tùy chọn; số tiền, chiều giao dịch và nội dung được báo lỗi ngay trong biểu mẫu.
 
-Trong Cài đặt, tùy chọn cục bộ (prompt, rule notification, prompt đọc màn hình, popup) được lưu độc lập và không yêu cầu API key hoặc kết nối mạng. URL/key/model AI có luồng kiểm tra và lưu riêng.
+Trong Cài đặt, tùy chọn cục bộ (prompt notification, rule notification, popup) được lưu độc lập và không yêu cầu API key hoặc kết nối mạng. URL/key/model AI có luồng kiểm tra và lưu riêng.
 
 Chi tiết ma trận kiểm thử UI và blocker: [`docs/ui-verification.md`](docs/ui-verification.md).
 
@@ -175,26 +165,15 @@ Trên Android 13 trở lên, cho phép quyền **POST_NOTIFICATIONS** để Mone
 
 ### Hiển thị trên ứng dụng khác
 
-Cấp quyền **Hiển thị trên ứng dụng khác** nếu muốn dùng cửa sổ overlay xác nhận hoặc nút nổi đọc màn hình.
-
-### Đọc màn hình giao dịch
-
-Bật dịch vụ Accessibility **Đọc màn hình giao dịch** nếu muốn:
-
-- tự động nhận diện một số màn hình giao dịch được hỗ trợ;
-- đọc thủ công bằng Accessibility XML;
-- chụp màn hình để OCR;
-- kết hợp Accessibility XML và OCR.
-
-Quyền Accessibility có thể đọc nội dung giao diện của ứng dụng đang mở. Chỉ bật quyền này khi bạn hiểu và chấp nhận phạm vi truy cập của Android Accessibility Service.
+Cấp quyền **Hiển thị trên ứng dụng khác** nếu muốn dùng cửa sổ overlay xác nhận.
 
 ## Bảo mật và quyền riêng tư
 
 - Dữ liệu giao dịch và notification được lưu trên thiết bị trong database `money-check.db`.
 - API key không được lưu dạng plaintext trong SharedPreferences; ứng dụng mã hóa key bằng AES-GCM và khóa trong Android Keystore.
-- OCR chạy trên thiết bị; client phân tích gửi văn bản/XML đã trích xuất, không gửi bitmap ảnh chụp màn hình. Nội dung notification hoặc màn hình được gửi tới API đã cấu hình khi phân tích. Nhà cung cấp API có thể xử lý dữ liệu theo chính sách riêng của họ.
+- Nội dung notification được gửi tới API đã cấu hình khi phân tích. Khi người dùng chọn ảnh giao dịch, ứng dụng gửi ảnh đó tới API để trích xuất thông tin. Nhà cung cấp API có thể xử lý dữ liệu theo chính sách riêng của họ.
 - Database và file xuất không được mã hóa ở tầng ứng dụng. Không chia sẻ file `.db` nếu chứa thông tin cá nhân. API key nằm trong kho preferences riêng, không phải database xuất ra. Android backup được tắt trong manifest.
-- Tab Chat đã có UI và luồng truyền danh sách giao dịch cùng hội thoại vào client, nhưng thiếu `TransactionChatClient`; chưa thể xác minh payload mạng hoặc khả năng chat thực tế.
+- Tab Chat có UI và luồng truyền danh sách giao dịch cùng hội thoại vào `TransactionChatClient`. Khả năng chat thực tế còn phụ thuộc vào API và model đã cấu hình.
 - Prompt có hướng dẫn không tin nội dung chỉ dẫn xuất hiện bên trong notification/XML, nhưng người dùng vẫn phải kiểm tra bản nháp trước khi xác nhận.
 - Bản build release hiện dùng debug signing config để thuận tiện cài đặt cục bộ. Cần thay bằng release keystore riêng trước khi phát hành.
 
@@ -202,7 +181,6 @@ Quyền Accessibility có thể đọc nội dung giao diện của ứng dụng
 
 ```text
 app/src/main/java/com/example/moneycheck/
-├── accessibility/   Accessibility service, XML cleaner, OCR và đọc màn hình
 ├── data/            Entity và repository SQLite
 ├── llm/             Client API, phân tích notification và WorkManager
 ├── notification/    Notification listener, extractor và confirmation notifier
@@ -219,14 +197,12 @@ Các test chính nằm tại:
 app/src/test/java/com/example/moneycheck/
 ```
 
-Bao gồm test cho matcher notification title, trích xuất giao dịch từ màn hình, làm sạch XML và nội dung capture.
+Bao gồm test cho matcher notification title, trích xuất giao dịch từ ảnh và kiểm tra dữ liệu giao dịch.
 
 ## Giới hạn hiện tại
 
-- Tự động nhận diện màn hình hiện được triển khai rõ ràng cho mẫu Shopee được hỗ trợ trong mã nguồn; các ứng dụng khác nên dùng chế độ đọc thủ công và prompt riêng.
 - Ứng dụng cần API key hợp lệ để phân tích bằng LLM và chat.
-- Một số ứng dụng có thể chặn Accessibility hoặc chụp màn hình bảo mật.
-- Kết quả OCR và LLM phụ thuộc vào chất lượng màn hình, nội dung notification và dịch vụ API.
+- Kết quả phân tích phụ thuộc vào chất lượng ảnh, nội dung notification và dịch vụ API.
 - Chưa có cơ chế đồng bộ dữ liệu giao dịch lên máy chủ; dữ liệu là cục bộ trên thiết bị.
 
 ## License

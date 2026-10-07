@@ -123,7 +123,6 @@ import com.example.moneycheck.MainViewModel
 import com.example.moneycheck.OpenAiConnectionState
 import com.example.moneycheck.ChatState
 import com.example.moneycheck.RetestState
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import com.example.moneycheck.data.AnalysisStatus
 import com.example.moneycheck.data.NotificationWithDraft
 import com.example.moneycheck.data.TransactionEntity
@@ -165,19 +164,14 @@ internal fun TransactionConfirmationDialog(
         mutableStateOf(false)
     }
     var showLlmInput by rememberSaveable(item.notification.id, draft.analyzedAt) { mutableStateOf(false) }
-    val isManualScreen = ScreenCaptureSessionStore.isManualScreenEvent(item.notification.eventId)
     val llmInput = remember(item.notification.rawPayload, item.notification.expandedContent, draft.rawModelJson) {
-        if (isManualScreen) {
-            parseLlmInput(item.notification.rawPayload)?.copy(modelOutput = draft.rawModelJson)
-        } else {
-            LlmInputSnapshot(
-                source = "notification",
-                title = item.notification.title,
-                text = item.notification.text,
-                expandedContent = item.notification.expandedContent,
-                modelOutput = draft.rawModelJson,
-            )
-        }
+        LlmInputSnapshot(
+            source = "notification",
+            title = item.notification.title,
+            text = item.notification.text,
+            expandedContent = item.notification.expandedContent,
+            modelOutput = draft.rawModelJson,
+        )
     }
     val parsedAmount = amount.toLongOrNull()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -206,13 +200,6 @@ internal fun TransactionConfirmationDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (isManualScreen) {
-                    Text(
-                        "Nguồn: Đọc từ màn hình",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
             }
 
             Column(
@@ -296,7 +283,6 @@ internal fun TransactionConfirmationDialog(
                 OutlinedButton(
                     onClick = { showLlmInput = true },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = llmInput != null,
                 ) {
                     Icon(Icons.Outlined.Code, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -395,11 +381,9 @@ internal fun TransactionConfirmationDialog(
     }
 
     if (showLlmInput) {
-        llmInput?.let { input ->
-            LlmInputDialog(
-                input = input,
-                onDismiss = { showLlmInput = false },
-            )
-        }
+        LlmInputDialog(
+            input = llmInput,
+            onDismiss = { showLlmInput = false },
+        )
     }
 }

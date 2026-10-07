@@ -124,7 +124,6 @@ import com.example.moneycheck.MainViewModel
 import com.example.moneycheck.OpenAiConnectionState
 import com.example.moneycheck.ChatState
 import com.example.moneycheck.RetestState
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import com.example.moneycheck.data.AnalysisStatus
 import com.example.moneycheck.data.NotificationWithDraft
 import com.example.moneycheck.data.TransactionEntity
@@ -158,14 +157,12 @@ internal fun SettingsScreen(
     hasNotificationAccess: Boolean,
     canPostConfirmations: Boolean,
     canDrawOverlays: Boolean,
-    hasScreenCaptureAccess: Boolean,
     onOpenNotificationAccess: () -> Unit,
     onRequestPostNotifications: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
-    onOpenScreenCaptureAccess: () -> Unit,
     onValidateApiKey: (String, String) -> Unit,
     onApiKeyChanged: () -> Unit,
-    onSaveLocal: (String, Map<String, Set<String>>, Map<String, String>, Boolean) -> Unit,
+    onSaveLocal: (String, Map<String, Set<String>>, Boolean) -> Unit,
     onSaveAi: (String, String, String) -> Boolean,
     onOpenTool: (SettingsDestination) -> Unit,
     onClearApiKey: () -> Unit,
@@ -179,16 +176,11 @@ internal fun SettingsScreen(
     var notificationRuleInputs by rememberSaveable(stateSaver = StringMapSaver) {
         mutableStateOf(settings.notificationRules.mapValues { (_, titles) -> titles.sorted().joinToString("\n") })
     }
-    var screenPromptInputs by rememberSaveable(stateSaver = StringMapSaver) { mutableStateOf(settings.screenPrompts.toMap()) }
     var overlayEnabled by rememberSaveable { mutableStateOf(settings.overlayEnabled) }
     var lastPersistedRules by rememberSaveable(stateSaver = StringMapSaver) {
         mutableStateOf(settings.notificationRules.mapValues { (_, titles) -> titles.sorted().joinToString("\n") })
     }
-    var lastPersistedScreenPrompts by rememberSaveable(stateSaver = StringMapSaver) {
-        mutableStateOf(settings.screenPrompts.toMap())
-    }
     var query by rememberSaveable { mutableStateOf("") }
-    var screenPromptQuery by rememberSaveable { mutableStateOf("") }
     var saved by rememberSaveable { mutableStateOf(false) }
     var modelMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var promptEditorTarget by remember { mutableStateOf<PromptEditorTarget?>(null) }
@@ -200,12 +192,10 @@ internal fun SettingsScreen(
     fun reconcilePersistedMaps() {
         val persistedRules = settings.notificationRules.mapValues { (_, titles) -> titles.sorted().joinToString("\n") }
         notificationRuleInputs = reconcileDraftMap(notificationRuleInputs, lastPersistedRules, persistedRules)
-        screenPromptInputs = reconcileDraftMap(screenPromptInputs, lastPersistedScreenPrompts, settings.screenPrompts)
         lastPersistedRules = persistedRules
-        lastPersistedScreenPrompts = settings.screenPrompts.toMap()
     }
 
-    LaunchedEffect(settings.notificationRules, settings.screenPrompts) {
+    LaunchedEffect(settings.notificationRules) {
         reconcilePersistedMaps()
     }
 
@@ -218,23 +208,6 @@ internal fun SettingsScreen(
             it.packageName !in notificationRuleInputs &&
                 (it.label.contains(normalizedQuery, true) || it.packageName.contains(normalizedQuery, true))
         }
-    }
-    val normalizedScreenPromptQuery = screenPromptQuery.trim()
-    val installedAppByPackage = remember(installedApps) { installedApps.associateBy(InstalledApp::packageName) }
-    val screenPromptApps = remember(installedAppByPackage, screenPromptInputs) {
-        (KnownScreenPromptPackages + screenPromptInputs.keys)
-            .distinct()
-            .map { packageName -> installedAppByPackage[packageName] ?: knownScreenPromptApp(packageName) }
-    }
-    val screenPromptPackages = remember(screenPromptApps) { screenPromptApps.map(InstalledApp::packageName).toSet() }
-    val filteredScreenPromptApps = remember(installedApps, normalizedScreenPromptQuery, screenPromptPackages) {
-        if (normalizedScreenPromptQuery.isBlank()) emptyList() else installedApps
-            .filter { app ->
-                app.packageName !in screenPromptPackages &&
-                    (app.label.contains(normalizedScreenPromptQuery, true) ||
-                        app.packageName.contains(normalizedScreenPromptQuery, true))
-            }
-            .take(8)
     }
     val canSave = model.isNotBlank() &&
         apiBaseUrl.isNotBlank() &&
@@ -269,7 +242,7 @@ internal fun SettingsScreen(
                             val rules = notificationRuleInputs.mapValues { (_, input) ->
                                 input.lineSequence().map(String::trim).filter(String::isNotEmpty).toSet()
                             }
-                            onSaveLocal(prompt, rules, screenPromptInputs, overlayEnabled)
+                            onSaveLocal(prompt, rules, overlayEnabled)
                             saved = true
                         },
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
@@ -303,17 +276,6 @@ internal fun SettingsScreen(
                     granted = hasNotificationAccess,
                     actionLabel = "Thiết lập",
                     onAction = onOpenNotificationAccess,
-                )
-                PermissionRow(
-                    title = "Đọc màn hình giao dịch",
-                    description = if (hasScreenCaptureAccess) {
-                        "Sẵn sàng hiển thị nút nổi trên ứng dụng bạn chọn"
-                    } else {
-                        "Bật Trợ năng để đọc màn chi tiết khi bạn chủ động yêu cầu"
-                    },
-                    granted = hasScreenCaptureAccess,
-                    actionLabel = if (hasScreenCaptureAccess) "Đã bật" else "Thiết lập",
-                    onAction = onOpenScreenCaptureAccess,
                 )
                 PermissionRow(
                     title = "Notification xác nhận",
@@ -442,87 +404,6 @@ internal fun SettingsScreen(
 
         item {
             SettingsSection(
-                title = "Prompt đọc màn hình",
-                subtitle = "Prompt riêng theo app khi bấm nút nổi để phân tích màn chi tiết giao dịch.",
-                modifier = Modifier.padding(horizontal = 18.dp),
-            ) {
-                Text(
-                    "Moneycheck tự nhận diện package app đang mở, rồi dùng prompt tương ứng ở đây. Nếu chưa có prompt riêng, app sẽ dùng prompt mặc định.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = screenPromptQuery,
-                    onValueChange = { screenPromptQuery = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Tìm app để thêm/sửa prompt") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
-                )
-                Text(
-                    "Gợi ý & đã cấu hình",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
-                screenPromptApps.forEach { app ->
-                    val defaultPrompt = AppSettings.defaultScreenPrompt(app.packageName)
-                    val currentPrompt = screenPromptInputs[app.packageName] ?: defaultPrompt
-                    ScreenPromptAppRow(
-                        app = app,
-                        prompt = currentPrompt,
-                        isCustom = currentPrompt.trim() != defaultPrompt.trim(),
-                        onEdit = {
-                            promptEditorTarget = PromptEditorTarget(
-                                packageName = app.packageName,
-                                title = "Prompt ${app.label}",
-                                subtitle = app.packageName,
-                                prompt = currentPrompt,
-                                defaultPrompt = defaultPrompt,
-                            )
-                        },
-                    )
-                }
-                if (normalizedScreenPromptQuery.isNotBlank()) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                    Text(
-                        "Kết quả tìm kiếm",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (filteredScreenPromptApps.isEmpty()) {
-                        Text(
-                            "Không tìm thấy app phù hợp.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        filteredScreenPromptApps.forEach { app ->
-                            val defaultPrompt = AppSettings.defaultScreenPrompt(app.packageName)
-                            ScreenPromptAppRow(
-                                app = app,
-                                prompt = defaultPrompt,
-                                isCustom = false,
-                                onEdit = {
-                                    promptEditorTarget = PromptEditorTarget(
-                                        packageName = app.packageName,
-                                        title = "Prompt ${app.label}",
-                                        subtitle = app.packageName,
-                                        prompt = defaultPrompt,
-                                        defaultPrompt = defaultPrompt,
-                                    )
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            SettingsSection(
                 title = "Ứng dụng tự động phân tích",
                 subtitle = "Đã chọn ${notificationRuleInputs.size} ứng dụng. Chỉ notification khớp title mới gọi LLM và hiện bảng xác nhận.",
                 modifier = Modifier.padding(horizontal = 18.dp),
@@ -612,13 +493,7 @@ internal fun SettingsScreen(
             target = target,
             onDismiss = { promptEditorTarget = null },
             onApply = { updatedPrompt ->
-                val packageName = target.packageName
-                if (packageName == null) {
-                    prompt = updatedPrompt
-                } else {
-                    screenPromptInputs = screenPromptInputs + (packageName to updatedPrompt)
-                    screenPromptQuery = ""
-                }
+                prompt = updatedPrompt
                 saved = false
                 promptEditorTarget = null
             },
@@ -631,16 +506,6 @@ internal data class PromptEditorTarget(
     val subtitle: String,
     val prompt: String,
     val defaultPrompt: String,
-    val packageName: String? = null,
-)
-
-internal fun knownScreenPromptApp(packageName: String): InstalledApp = InstalledApp(
-    packageName = packageName,
-    label = when (packageName) {
-        "com.shopee.vn" -> "Shopee"
-        "vn.com.vng.zalopay" -> "ZaloPay"
-        else -> packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
-    },
 )
 
 @Composable
@@ -688,59 +553,6 @@ internal fun PromptPreviewCard(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onReset, enabled = isCustom) { Text("Mặc định") }
             }
-        }
-    }
-}
-
-@Composable
-internal fun ScreenPromptAppRow(
-    app: InstalledApp,
-    prompt: String,
-    isCustom: Boolean,
-    onEdit: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-    ) {
-        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppAvatar(app.label, app.packageName, size = 38)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            app.label,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        PromptStatusChip(isCustom = isCustom)
-                    }
-                    Text(
-                        app.packageName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                TextButton(onClick = onEdit) { Text("Sửa") }
-            }
-            Text(
-                prompt.lineSequence()
-                    .map(String::trim)
-                    .filter(String::isNotEmpty)
-                    .take(3)
-                    .joinToString(" "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }

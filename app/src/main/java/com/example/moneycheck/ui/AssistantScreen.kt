@@ -124,7 +124,6 @@ import com.example.moneycheck.MainViewModel
 import com.example.moneycheck.OpenAiConnectionState
 import com.example.moneycheck.ChatState
 import com.example.moneycheck.RetestState
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import com.example.moneycheck.data.AnalysisStatus
 import com.example.moneycheck.data.NotificationWithDraft
 import com.example.moneycheck.data.TransactionEntity

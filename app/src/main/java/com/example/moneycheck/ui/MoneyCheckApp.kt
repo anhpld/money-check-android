@@ -123,7 +123,6 @@ import com.example.moneycheck.MainViewModel
 import com.example.moneycheck.OpenAiConnectionState
 import com.example.moneycheck.ChatState
 import com.example.moneycheck.RetestState
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import com.example.moneycheck.data.AnalysisStatus
 import com.example.moneycheck.data.NotificationWithDraft
 import com.example.moneycheck.data.TransactionEntity
@@ -162,12 +161,9 @@ fun MoneyCheckApp(
     hasNotificationAccess: Boolean,
     canPostConfirmations: Boolean,
     canDrawOverlays: Boolean,
-    hasScreenCaptureAccess: Boolean,
     onOpenNotificationAccess: () -> Unit,
     onRequestPostNotifications: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
-    onOpenScreenCaptureAccess: () -> Unit,
-    onStartScreenRead: () -> Unit,
     onExportDatabase: () -> Unit,
 ) {
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
@@ -269,7 +265,6 @@ fun MoneyCheckApp(
                     )
                 },
                 onUpdate = viewModel::updateTransaction,
-                onStartScreenRead = onStartScreenRead,
                 modifier = Modifier.padding(innerPadding),
             )
 
@@ -304,11 +299,9 @@ fun MoneyCheckApp(
                 hasNotificationAccess = hasNotificationAccess,
                 canPostConfirmations = canPostConfirmations,
                 canDrawOverlays = canDrawOverlays,
-                hasScreenCaptureAccess = hasScreenCaptureAccess,
                 onOpenNotificationAccess = onOpenNotificationAccess,
                 onRequestPostNotifications = onRequestPostNotifications,
                 onRequestOverlayPermission = onRequestOverlayPermission,
-                onOpenScreenCaptureAccess = onOpenScreenCaptureAccess,
                 onValidateApiKey = viewModel::validateOpenAiKey,
                 onApiKeyChanged = viewModel::clearOpenAiValidation,
                 onSaveLocal = viewModel::saveLocalPreferences,

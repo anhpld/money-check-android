@@ -126,7 +126,6 @@ import com.example.moneycheck.MainViewModel
 import com.example.moneycheck.OpenAiConnectionState
 import com.example.moneycheck.ChatState
 import com.example.moneycheck.RetestState
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import com.example.moneycheck.data.AnalysisStatus
 import com.example.moneycheck.data.NotificationWithDraft
 import com.example.moneycheck.data.TransactionEntity
@@ -185,7 +184,6 @@ internal fun TransactionScreen(
     onDelete: (Long) -> Unit,
     onAdd: (String, String, String, Long, String, String, Long, String, () -> Unit) -> Unit,
     onUpdate: (Long, String, String, String, Long, String, String, Long, () -> Unit) -> Unit,
-    onStartScreenRead: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -395,10 +393,6 @@ internal fun TransactionScreen(
             onPickImage = {
                 showAddMethodPicker = false
                 imagePickerLauncher.launch("image/*")
-            },
-            onReadScreen = {
-                showAddMethodPicker = false
-                onStartScreenRead()
             },
         )
     }
