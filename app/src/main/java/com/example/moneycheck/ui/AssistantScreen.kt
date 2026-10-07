@@ -164,9 +164,8 @@ internal fun ChatScreen(
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
-    var modelMenuExpanded by remember { mutableStateOf(false) }
-    var showCustomModelDialog by rememberSaveable { mutableStateOf(false) }
-    var customModelInput by rememberSaveable { mutableStateOf("") }
+    var showModelDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (availableModels.isEmpty()) {
@@ -188,6 +187,26 @@ internal fun ChatScreen(
         }
     }
 
+    if (showModelDialog) {
+        ModelSelectionDialog(
+            selectedModel = state.selectedModel,
+            availableModels = availableModels,
+            onSelectModel = onSelectModel,
+            onRefreshModels = onRefreshModels,
+            onDismiss = { showModelDialog = false },
+        )
+    }
+
+    if (showDeleteDialog) {
+        DeleteChatDialog(
+            onConfirm = {
+                onClear()
+                showDeleteDialog = false
+            },
+            onDismiss = { showDeleteDialog = false },
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -207,88 +226,37 @@ internal fun ChatScreen(
                 modifier = Modifier.weight(1f),
                 eyebrowPill = false,
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    IconButton(onClick = { modelMenuExpanded = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Chọn model chat", modifier = Modifier.size(19.dp))
-                    }
-                    DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { modelMenuExpanded = false }) {
-                        availableModels.forEach { modelName ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        modelName,
-                                        fontWeight = if (modelName == state.selectedModel) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (modelName == state.selectedModel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    )
-                                },
-                                onClick = { onSelectModel(modelName); modelMenuExpanded = false },
-                            )
-                        }
-                        if (availableModels.isNotEmpty()) HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Làm mới danh sách model") },
-                            onClick = { onRefreshModels(); modelMenuExpanded = false },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Nhập mã model…") },
-                            onClick = {
-                                customModelInput = state.selectedModel
-                                showCustomModelDialog = true
-                                modelMenuExpanded = false
-                            },
-                        )
-                    }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                IconButton(
+                    onClick = { showModelDialog = true },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(com.example.moneycheck.R.drawable.nav_settings_2),
+                        contentDescription = "Chọn model",
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
                 if (state.messages.isNotEmpty()) {
-                    TextButton(onClick = onClear, enabled = !state.isSending) { Text("Xóa chat") }
+                    IconButton(
+                        onClick = { showDeleteDialog = true },
+                        enabled = !state.isSending,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(com.example.moneycheck.R.drawable.trash_2_lucide),
+                            contentDescription = "Xóa chat",
+                            modifier = Modifier.size(19.dp),
+                            tint = if (!state.isSending) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant,
+                        )
+                    }
                 }
             }
         }
-
-        if (showCustomModelDialog) {
-            AlertDialog(
-                onDismissRequest = { showCustomModelDialog = false },
-                title = { Text("Nhập model chat") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "Nhập mã định danh model (ví dụ: gpt-4o, claude-3-5-sonnet, gemini-1.5-flash...)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        OutlinedTextField(
-                            value = customModelInput,
-                            onValueChange = { customModelInput = it },
-                            placeholder = { Text("Tên model") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val trimmed = customModelInput.trim()
-                            if (trimmed.isNotEmpty()) {
-                                onSelectModel(trimmed)
-                            }
-                            showCustomModelDialog = false
-                        },
-                        enabled = customModelInput.isNotBlank(),
-                    ) {
-                        Text("Xác nhận")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showCustomModelDialog = false }) {
-                        Text("Hủy")
-                    }
-                },
-            )
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
 
         LazyColumn(
             state = listState,
@@ -331,13 +299,28 @@ internal fun ChatScreen(
                                 ).forEach { suggestion ->
                                     OutlinedButton(
                                         onClick = { onSend(suggestion) },
-                                        modifier = Modifier.fillMaxWidth().height(43.dp).shadow(3.dp, RoundedCornerShape(6.dp)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(43.dp)
+                                            .shadow(2.dp, RoundedCornerShape(6.dp)),
                                         shape = RoundedCornerShape(6.dp),
                                         border = null,
                                         colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        contentPadding = PaddingValues(horizontal = 13.dp),
                                     ) {
-                                        Text(suggestion, Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.Start)
-                                        Text("↗")
+                                        Text(
+                                            suggestion,
+                                            Modifier.weight(1f),
+                                            fontSize = 10.sp,
+                                            textAlign = TextAlign.Start,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Icon(
+                                            painter = painterResource(com.example.moneycheck.R.drawable.arrow_up_right_lucide),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(15.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
                                 }
                             }
@@ -350,7 +333,7 @@ internal fun ChatScreen(
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 8.dp),
+                            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 8.dp, bottomEnd = 0.dp),
                             modifier = Modifier.fillMaxWidth(0.86f),
                         ) {
                             SelectionContainer {
@@ -372,16 +355,56 @@ internal fun ChatScreen(
             if (state.isSending) {
                 item {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
                         verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 4.dp),
                     ) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Đang phân tích dữ liệu…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text("Đang phân tích…", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
             state.errorMessage?.let { message ->
-                item { InlineMessage(message, error = true) }
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(com.example.moneycheck.R.drawable.alert_circle_lucide),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                            Text(
+                                message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.weight(1f),
+                                fontSize = 11.sp,
+                            )
+                            val lastUserQuestion = state.messages.lastOrNull { it.role == "user" }?.content
+                            if (!lastUserQuestion.isNullOrBlank()) {
+                                TextButton(
+                                    onClick = { onSend(lastUserQuestion) },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                ) {
+                                    Text("Thử lại", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -420,10 +443,205 @@ internal fun ChatScreen(
                         contentPadding = PaddingValues(0.dp),
                         shape = RoundedCornerShape(6.dp),
                     ) {
-                        Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "Gửi", modifier = Modifier.size(18.dp))
+                        Icon(
+                            painter = painterResource(com.example.moneycheck.R.drawable.arrow_up_lucide),
+                            contentDescription = "Gửi",
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ModelSelectionDialog(
+    selectedModel: String,
+    availableModels: List<String>,
+    onSelectModel: (String) -> Unit,
+    onRefreshModels: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var customEntry by rememberSaveable { mutableStateOf(false) }
+    var customModelInput by rememberSaveable { mutableStateOf(selectedModel) }
+    var expandedDropdown by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Chọn model", fontWeight = FontWeight.SemiBold, fontSize = 19.sp)
+        },
+        text = {
+            if (customEntry) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Mã model",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    OutlinedTextField(
+                        value = customModelInput,
+                        onValueChange = { customModelInput = it },
+                        placeholder = { Text("Ví dụ: gpt-4o-mini") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Model phân tích",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .clickable { expandedDropdown = true },
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                color = MaterialTheme.colorScheme.surface,
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        selectedModel.ifBlank { "Chọn model…" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Icon(
+                                        Icons.Filled.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = expandedDropdown,
+                                onDismissRequest = { expandedDropdown = false },
+                                modifier = Modifier.fillMaxWidth(0.75f),
+                            ) {
+                                availableModels.forEach { modelName ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                modelName,
+                                                fontWeight = if (modelName == selectedModel) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (modelName == selectedModel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        },
+                                        onClick = {
+                                            onSelectModel(modelName)
+                                            expandedDropdown = false
+                                        },
+                                    )
+                                }
+                                if (availableModels.isNotEmpty()) HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("Nhập mã model…") },
+                                    onClick = {
+                                        expandedDropdown = false
+                                        customEntry = true
+                                    },
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = onRefreshModels,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(com.example.moneycheck.R.drawable.refresh_cw_lucide),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Làm mới danh sách model", fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (customEntry) {
+                Button(
+                    onClick = {
+                        val trimmed = customModelInput.trim()
+                        if (trimmed.isNotEmpty()) {
+                            onSelectModel(trimmed)
+                        }
+                        onDismiss()
+                    },
+                    enabled = customModelInput.isNotBlank(),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text("Chọn model")
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("Đóng")
+                }
+            }
+        },
+        dismissButton = {
+            if (customEntry) {
+                OutlinedButton(
+                    onClick = { customEntry = false },
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text("Quay lại")
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun DeleteChatDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Xóa cuộc trò chuyện?", fontWeight = FontWeight.SemiBold, fontSize = 19.sp)
+        },
+        text = {
+            Text(
+                "Toàn bộ tin nhắn trò chuyện sẽ bị xóa.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text("Xác nhận xóa")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text("Giữ lại")
+            }
+        },
+    )
 }
