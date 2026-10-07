@@ -24,13 +24,23 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Optimized Release APK
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName="1.0.${{ github.run_number }}" --no-daemon
 
       - name: Upload APK artifact to GitHub
         uses: actions/upload-artifact@v4
         with:
           name: moneycheck-release-apk
           path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Generate Release Notes
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s%n%n%b" | head -c 500)
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG="Bản phát hành Moneycheck #${{ github.run_number }}"
+          fi
+          echo "$COMMIT_MSG" > release-notes.txt
+          echo "Generated release notes:"
+          cat release-notes.txt
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
@@ -47,11 +57,11 @@ jobs:
               --app "$FIREBASE_APP_ID" \
               --token "$FIREBASE_TOKEN" \
               --testers "plda140997@gmail.com" \
-              --release-notes "Bản Release siêu nhẹ (~4MB): Thêm tính năng nhập/sao lưu database, trợ lý AI SQL tool calling, UI Lovable" || \
+              --release-notes-file release-notes.txt || \
             firebase appdistribution:distribute app/build/outputs/apk/release/app-release.apk \
               --app "$FIREBASE_APP_ID" \
               --token "$FIREBASE_TOKEN" \
-              --release-notes "Bản Release siêu nhẹ (~4MB): Thêm tính năng nhập/sao lưu database, trợ lý AI SQL tool calling, UI Lovable"
+              --release-notes-file release-notes.txt
           else
             echo "Deploying using Service Account JSON..."
             echo "$FIREBASE_CREDENTIALS" > service-account.json
@@ -59,9 +69,9 @@ jobs:
             firebase appdistribution:distribute app/build/outputs/apk/release/app-release.apk \
               --app "$FIREBASE_APP_ID" \
               --testers "plda140997@gmail.com" \
-              --release-notes "Bản Release siêu nhẹ (~4MB): Thêm tính năng nhập/sao lưu database, trợ lý AI SQL tool calling, UI Lovable" || \
+              --release-notes-file release-notes.txt || \
             firebase appdistribution:distribute app/build/outputs/apk/release/app-release.apk \
               --app "$FIREBASE_APP_ID" \
-              --release-notes "Bản Release siêu nhẹ (~4MB): Thêm tính năng nhập/sao lưu database, trợ lý AI SQL tool calling, UI Lovable"
+              --release-notes-file release-notes.txt
             rm -f service-account.json
           fi
