@@ -179,8 +179,9 @@ internal fun TransactionConfirmationDialog(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
         containerColor = MaterialTheme.colorScheme.surface,
+        scrimColor = Color.Black.copy(alpha = 0.55f),
         sheetGesturesEnabled = false,
         dragHandle = null,
     ) {
@@ -191,14 +192,20 @@ internal fun TransactionConfirmationDialog(
                 .imePadding(),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                Text("Xác nhận thông tin", style = MaterialTheme.typography.headlineSmall)
+                Text("Xác nhận giao dịch", style = MaterialTheme.typography.titleLarge)
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
+                    Text("TỰ ĐỘNG  ·  CHỜ BẠN KIỂM TRA", Modifier.padding(horizontal = 7.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+                Text(formatMoney(parsedAmount ?: 0), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 Text(
-                    "Từ ${item.notification.appName} · ${formatDateTime(transactionTime)}",
-                    style = MaterialTheme.typography.bodyMedium,
+                    "${item.notification.appName} · ${formatDateTime(transactionTime)}",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                 )
             }
 
@@ -206,14 +213,14 @@ internal fun TransactionConfirmationDialog(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text("Loại giao dịch", style = MaterialTheme.typography.titleSmall)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(7.dp),
                 ) {
                     Row(
                         modifier = Modifier.padding(4.dp),
@@ -291,7 +298,7 @@ internal fun TransactionConfirmationDialog(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp).navigationBarsPadding(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp).navigationBarsPadding(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Button(
@@ -360,6 +367,7 @@ internal fun TransactionConfirmationDialog(
         )
         AlertDialog(
             onDismissRequest = { showTransactionTimePicker = false },
+            containerColor = MaterialTheme.colorScheme.background,
             title = { Text("Chọn giờ thanh toán") },
             text = { TimePicker(state = timePickerState) },
             dismissButton = {

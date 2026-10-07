@@ -2,6 +2,7 @@ package com.example.moneycheck.ui
 
 import android.util.LruCache
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
@@ -102,12 +104,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
@@ -115,6 +120,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -142,7 +148,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-internal val IncomeStrong = Color(0xFF087A55)
+internal val IncomeStrong = Color(0xFF006D49)
+internal val ExpenseStrong = Color(0xFFCB473F)
 private val AppIconCache = object : LruCache<String, ImageBitmap>(64) {}
 
 @Composable
@@ -153,27 +160,17 @@ internal fun PageHeader(
     modifier: Modifier = Modifier,
     eyebrowPill: Boolean = true,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        if (eyebrowPill) {
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
-                Text(
-                    eyebrow.uppercase(),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        } else {
-            Text(
-                eyebrow.uppercase(),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Text(title, style = MaterialTheme.typography.headlineMedium)
-        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            eyebrow.uppercase(),
+            fontSize = 8.sp,
+            lineHeight = 11.sp,
+            letterSpacing = 1.25.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(title, fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold)
+        Text(subtitle, fontSize = 11.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -185,6 +182,7 @@ internal fun ManualAddMethodDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.background,
         title = { Text("Thêm giao dịch") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -224,73 +222,66 @@ internal fun ManualAddMethodDialog(
 }
 
 @Composable
-internal fun BalanceHero(net: Long, income: Long, expense: Long, periodLabel: String) {
+internal fun BalanceHero(net: Long, income: Long, expense: Long, transactionCount: Int) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = com.example.moneycheck.ui.theme.SummaryGreen),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "Dòng tiền ròng",
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Text(
-                        formatMoney(net),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Surface(
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.10f),
-                    shape = CircleShape,
-                ) {
-                    Text(
-                        periodLabel,
-                        Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        style = MaterialTheme.typography.labelMedium,
+        Box {
+            Canvas(Modifier.matchParentSize()) {
+                val center = Offset(size.width - 45.dp.toPx(), 28.dp.toPx())
+                listOf(67.dp, 47.dp, 27.dp).forEach { radius ->
+                    drawCircle(
+                        color = com.example.moneycheck.ui.theme.SummaryMuted.copy(alpha = 0.35f),
+                        radius = radius.toPx(),
+                        center = center,
+                        style = Stroke(width = 1.dp.toPx()),
                     )
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.18f))
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 23.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Dòng tiền ròng", Modifier.weight(1f), color = com.example.moneycheck.ui.theme.SummaryMuted, style = MaterialTheme.typography.bodySmall)
+                Icon(Icons.Filled.BarChart, contentDescription = null, tint = com.example.moneycheck.ui.theme.SummaryMuted, modifier = Modifier.size(19.dp))
+            }
+            Text(formatMoney(net), color = Color.White, fontSize = 31.sp, lineHeight = 46.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("•  Đã ghi nhận $transactionCount giao dịch", color = com.example.moneycheck.ui.theme.SummaryMuted, fontSize = 9.sp, lineHeight = 14.sp)
+            Spacer(Modifier.height(22.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.22f))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                HeroMetric("↓", "Tiền vào", income, Modifier.weight(1f), MaterialTheme.colorScheme.primary)
-                HeroMetric("↑", "Tiền ra", expense, Modifier.weight(1f), MaterialTheme.colorScheme.error)
+                HeroMetric(com.example.moneycheck.R.drawable.arrow_down_left_lucide, "Tiền vào", income, Modifier.weight(1f), com.example.moneycheck.ui.theme.SummaryIncome)
+                HeroMetric(com.example.moneycheck.R.drawable.arrow_up_right_lucide, "Tiền ra", expense, Modifier.weight(1f), com.example.moneycheck.ui.theme.SummaryExpense)
+            }
+            Spacer(Modifier.height(20.dp))
             }
         }
     }
 }
 
 @Composable
-internal fun HeroMetric(symbol: String, label: String, value: Long, modifier: Modifier, accent: Color) {
+internal fun HeroMetric(iconRes: Int, label: String, value: Long, modifier: Modifier, accent: Color) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(symbol, color = accent, fontWeight = FontWeight.Bold)
+            Icon(painterResource(iconRes), contentDescription = null, modifier = Modifier.size(17.dp), tint = accent)
             Spacer(Modifier.width(5.dp))
             Text(
                 label,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
-                style = MaterialTheme.typography.labelMedium,
+                color = com.example.moneycheck.ui.theme.SummaryMuted,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
             )
         }
         Text(
             formatMoney(value),
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
+            color = accent,
+            fontSize = 16.sp,
+            lineHeight = 22.sp,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -301,14 +292,14 @@ internal fun HeroMetric(symbol: String, label: String, value: Long, modifier: Mo
 internal fun SectionHeader(title: String, trailing: String? = null, subtitle: String? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(title, fontSize = 14.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
             subtitle?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it, fontSize = 9.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         trailing?.let {
             Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape) {
-                Text(it, Modifier.padding(horizontal = 11.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
+                Text(it, Modifier.padding(horizontal = 7.dp, vertical = 4.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -316,58 +307,14 @@ internal fun SectionHeader(title: String, trailing: String? = null, subtitle: St
 
 @Composable
 internal fun TransactionDayHeader(date: LocalDate, transactions: List<TransactionEntity>) {
-    val income = transactions.filter { it.direction == "income" }.sumOf { it.amount }
-    val expense = transactions.filter { it.direction == "expense" }.sumOf { it.amount }
-    val net = income - expense
-    val netColor = when {
-        net > 0 -> IncomeStrong
-        net < 0 -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp),
+            .padding(top = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(10.dp),
-        ) {
-            Icon(
-                Icons.Outlined.DateRange,
-                contentDescription = null,
-                modifier = Modifier.padding(8.dp).size(18.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(
-                formatTransactionDayTitle(date),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                "${formatEpochDay(date.toEpochDay())} · ${transactions.size} giao dịch",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Surface(
-            color = netColor.copy(alpha = 0.12f),
-            shape = CircleShape,
-        ) {
-            Text(
-                formatSignedMoney(net),
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                color = netColor,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-            )
-        }
+        Text(formatTransactionDayTitle(date), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+        Text(formatEpochDay(date.toEpochDay()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -378,111 +325,37 @@ internal fun TransactionCard(
     onDelete: () -> Unit,
 ) {
     val income = transaction.direction == "income"
-    val accent = if (income) IncomeStrong else MaterialTheme.colorScheme.error
+    val accent = if (income) IncomeStrong else ExpenseStrong
     var menuExpanded by remember { mutableStateOf(false) }
     var showLlmInput by rememberSaveable(transaction.id) { mutableStateOf(false) }
     val llmInput = remember(transaction.llmInputJson) { parseLlmInput(transaction.llmInputJson) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable {
                 showLlmInput = true
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 7.dp),
+        shape = RoundedCornerShape(8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            AppAvatar(transaction.appName, transaction.packageName, size = 42)
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                AppAvatar(transaction.appName, transaction.packageName, size = 36)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     transaction.purpose.ifBlank { "Không có nội dung" },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${transaction.appName} · ${formatTransactionDateTime(transaction.transactionTime)}",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Surface(
-                        color = if (transaction.sourceType == TransactionSource.MANUAL) {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        },
-                        shape = CircleShape,
-                    ) {
-                        Text(
-                            if (transaction.sourceType == TransactionSource.MANUAL) "Thủ công" else "Tự động",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (llmInput?.modelOutput?.isNotBlank() == true || transaction.llmInputJson.isNotBlank()) {
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable { showLlmInput = true },
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = CircleShape,
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Code,
-                                    contentDescription = "Log LLM",
-                                    modifier = Modifier.size(11.dp),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                                Text(
-                                    "Log LLM",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
-                        }
-                    }
+                    Text("${transaction.appName} · ${formatTime(transaction.transactionTime)}", fontSize = 9.sp, lineHeight = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        transaction.recipient.ifBlank { transaction.appName },
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        (if (income) "+" else "−") + formatMoney(transaction.amount),
-                        color = accent,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                    )
-                }
-            }
-            Box {
+                Box {
                 IconButton(
                     onClick = { menuExpanded = true },
                     modifier = Modifier.size(36.dp),
@@ -528,6 +401,23 @@ internal fun TransactionCard(
                         },
                     )
                 }
+            }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Surface(color = if (transaction.sourceType == TransactionSource.MANUAL) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
+                    Text(if (transaction.sourceType == TransactionSource.MANUAL) "Thủ công" else "Tự động", Modifier.padding(horizontal = 6.dp, vertical = 3.dp), fontSize = 8.sp, lineHeight = 11.sp, color = if (transaction.sourceType == TransactionSource.MANUAL) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+                }
+                if (llmInput?.modelOutput?.isNotBlank() == true || transaction.llmInputJson.isNotBlank()) {
+                    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(4.dp)) {
+                        Text("Log LLM", Modifier.padding(horizontal = 6.dp, vertical = 3.dp), fontSize = 8.sp, lineHeight = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(transaction.recipient.ifBlank { "Chưa có người nhận" }, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.width(8.dp))
+                Text((if (income) "+" else "−") + formatMoney(transaction.amount), color = accent, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             }
         }
     }
@@ -828,6 +718,8 @@ internal fun ListCaption(text: String, modifier: Modifier = Modifier) {
 internal fun AppSelectionRow(
     app: InstalledApp,
     checked: Boolean,
+    expanded: Boolean = false,
+    onToggleExpanded: () -> Unit = {},
     onCheckedChange: () -> Unit,
     titleInput: String? = null,
     onTitleInputChanged: (String) -> Unit = {},
@@ -856,9 +748,24 @@ internal fun AppSelectionRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Checkbox(checked = checked, onCheckedChange = { onCheckedChange() })
+                if (checked) {
+                    val titleCount = titleInput.orEmpty().lineSequence().count { it.isNotBlank() }
+                    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape) {
+                        Text(
+                            if (titleCount == 0) "Mọi tiêu đề" else "$titleCount tiêu đề",
+                            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = onToggleExpanded, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                        Text(if (expanded) "⌄" else "›", style = MaterialTheme.typography.titleLarge)
+                    }
+                } else {
+                    Checkbox(checked = false, onCheckedChange = { onCheckedChange() })
+                }
             }
-            if (checked && titleInput != null) {
+            if (checked && expanded && titleInput != null) {
                 OutlinedTextField(
                     value = titleInput,
                     onValueChange = onTitleInputChanged,
@@ -872,6 +779,9 @@ internal fun AppSelectionRow(
                     maxLines = 5,
                     shape = MaterialTheme.shapes.medium,
                 )
+                TextButton(onClick = onCheckedChange, modifier = Modifier.align(Alignment.End)) {
+                    Text("Bỏ quy tắc", color = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }
@@ -896,18 +806,16 @@ internal fun PermissionBanner(onOpenNotificationAccess: () -> Unit) {
 
 @Composable
 internal fun EmptyStateCard(symbol: String, title: String, description: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 34.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(9.dp),
-        ) {
-            Surface(modifier = Modifier.size(58.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-                Box(contentAlignment = Alignment.Center) { Text(symbol, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.headlineSmall) }
-            }
-            Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 65.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(15.dp),
+    ) {
+        Surface(modifier = Modifier.size(67.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+            Box(contentAlignment = Alignment.Center) { Text(symbol, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.headlineSmall) }
         }
+        Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        Text(description, fontSize = 12.sp, lineHeight = 21.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }
 }
 
@@ -921,6 +829,7 @@ internal fun DeleteConfirmationDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.background,
         title = { Text(title) },
         text = { Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Không") } },
@@ -985,7 +894,7 @@ internal fun LlmInputDialog(
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.9f)
                 .navigationBarsPadding(),
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.background,
             shape = RoundedCornerShape(24.dp),
         ) {
             Column {

@@ -2,18 +2,24 @@ package com.example.moneycheck.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val MoneyGreen = Color(0xFF087F70)
+val MoneyGreen = Color(0xFF006A47)
 val MoneyGreenDark = Color(0xFF8ED8C5)
-val MoneyGreenContainer = Color(0xFFE7F1EF)
+val MoneyGreenContainer = Color(0xFFE1F7EB)
 val MoneyNavy = Color(0xFF20343E)
-val MoneyGold = Color(0xFFC78420)
+val MoneyGold = Color(0xFF9E7525)
 
-val LightBackground = Color(0xFFF4F7F6)
+val LightBackground = Color(0xFFEDF2ED)
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFE6ECEB)
-val LightOutline = Color(0xFFD7E1DF)
-val LightOnSurface = Color(0xFF102126)
-val LightOnSurfaceVariant = Color(0xFF617276)
+val LightSurfaceVariant = Color(0xFFE5EBE7)
+val LightOutline = Color(0xFFDAE0DB)
+val LightInput = Color(0xFFCCD3CE)
+val LightOnSurface = Color(0xFF1B2620)
+val LightOnSurfaceVariant = Color(0xFF5C6661)
+
+val SummaryGreen = Color(0xFF00442F)
+val SummaryMuted = Color(0xFFAFD0C0)
+val SummaryIncome = Color(0xFF80F2BD)
+val SummaryExpense = Color(0xFFF9B597)
 
 val DarkBackground = Color(0xFF0E1518)
 val DarkSurface = Color(0xFF172126)

@@ -3,6 +3,7 @@ package com.example.moneycheck.ui
 import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
@@ -26,6 +28,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -69,6 +72,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
@@ -103,10 +107,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -116,6 +122,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -189,104 +196,42 @@ internal fun ChatScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             PageHeader(
-                eyebrow = "Moneycheck AI",
+                eyebrow = "HIỂU HƠN VỀ TIỀN CỦA BẠN",
                 title = "Trợ lý",
                 subtitle = "$transactionCount giao dịch đã lưu",
                 modifier = Modifier.weight(1f),
                 eyebrowPill = false,
             )
-            if (state.messages.isNotEmpty()) {
-                TextButton(onClick = onClear, enabled = !state.isSending) { Text("Xóa chat") }
-            }
-        }
-
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 2.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            shape = RoundedCornerShape(14.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box {
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { modelMenuExpanded = true },
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(
-                                Icons.Outlined.Code,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                            Text(
-                                text = state.selectedModel.ifBlank { "Chọn model" },
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Icon(
-                                Icons.Filled.ArrowDropDown,
-                                contentDescription = "Chọn model",
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                    IconButton(onClick = { modelMenuExpanded = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Chọn model chat", modifier = Modifier.size(19.dp))
                     }
-
-                    DropdownMenu(
-                        expanded = modelMenuExpanded,
-                        onDismissRequest = { modelMenuExpanded = false },
-                    ) {
-                        if (availableModels.isNotEmpty()) {
-                            availableModels.forEach { modelName ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = modelName,
-                                            fontWeight = if (modelName == state.selectedModel) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (modelName == state.selectedModel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                        )
-                                    },
-                                    onClick = {
-                                        onSelectModel(modelName)
-                                        modelMenuExpanded = false
-                                    },
-                                )
-                            }
-                            HorizontalDivider()
+                    DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { modelMenuExpanded = false }) {
+                        availableModels.forEach { modelName ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        modelName,
+                                        fontWeight = if (modelName == state.selectedModel) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (modelName == state.selectedModel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                },
+                                onClick = { onSelectModel(modelName); modelMenuExpanded = false },
+                            )
                         }
+                        if (availableModels.isNotEmpty()) HorizontalDivider()
                         DropdownMenuItem(
-                            text = { Text("Tải lại danh sách model") },
-                            onClick = {
-                                onRefreshModels()
-                                modelMenuExpanded = false
-                            },
+                            text = { Text("Làm mới danh sách model") },
+                            onClick = { onRefreshModels(); modelMenuExpanded = false },
                         )
                         DropdownMenuItem(
-                            text = { Text("Nhập model khác…") },
+                            text = { Text("Nhập mã model…") },
                             onClick = {
                                 customModelInput = state.selectedModel
                                 showCustomModelDialog = true
@@ -295,12 +240,9 @@ internal fun ChatScreen(
                         )
                     }
                 }
-
-                Text(
-                    text = "Model chat",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (state.messages.isNotEmpty()) {
+                    TextButton(onClick = onClear, enabled = !state.isSending) { Text("Xóa chat") }
+                }
             }
         }
 
@@ -358,41 +300,71 @@ internal fun ChatScreen(
         ) {
             if (state.messages.isEmpty()) {
                 item {
-                    EmptyStateCard(
-                        symbol = "✦",
-                        title = if (transactionCount == 0) "Chưa có dữ liệu để chat" else "Hỏi về dòng tiền của bạn",
-                        description = if (transactionCount == 0) {
-                            "Hãy thêm hoặc xác nhận giao dịch trước."
-                        } else {
-                            "Ví dụ: Tháng này tôi đã chi bao nhiêu? Khoản nào lớn nhất? Tôi thường trả tiền cho ai?"
-                        },
-                    )
+                    if (transactionCount == 0) {
+                        EmptyStateCard(
+                            symbol = "✦",
+                            title = "Chưa có dữ liệu để trò chuyện",
+                            description = "Thêm hoặc xác nhận một giao dịch trước khi hỏi trợ lý.",
+                        )
+                    } else {
+                        Column(
+                            Modifier.fillMaxWidth().padding(top = 18.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Image(
+                                painter = painterResource(com.example.moneycheck.R.drawable.assistant_spark),
+                                contentDescription = null,
+                                modifier = Modifier.size(108.dp),
+                            )
+                            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
+                                Text("TRỢ LÝ TÀI CHÍNH", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                            Text("Tiền của bạn,\nrõ ràng hơn.", fontSize = 27.sp, lineHeight = 39.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                            Text("Hôm nay bạn muốn tìm hiểu điều gì?", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.size(18.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(
+                                    "Dòng tiền của tôi thế nào?",
+                                    "Tôi chi nhiều nhất cho khoản nào?",
+                                    "Tổng chi tiêu đã lưu là bao nhiêu?",
+                                ).forEach { suggestion ->
+                                    OutlinedButton(
+                                        onClick = { onSend(suggestion) },
+                                        modifier = Modifier.fillMaxWidth().height(43.dp).shadow(3.dp, RoundedCornerShape(6.dp)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = null,
+                                        colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    ) {
+                                        Text(suggestion, Modifier.weight(1f), fontSize = 10.sp, textAlign = TextAlign.Start)
+                                        Text("↗")
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             items(state.messages, key = { it.id }) { message ->
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = if (message.role == "user") Alignment.CenterEnd else Alignment.CenterStart,
-                ) {
-                    Surface(
-                        color = if (message.role == "user") {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier.fillMaxWidth(0.86f),
-                    ) {
+                if (message.role == "user") {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 8.dp),
+                            modifier = Modifier.fillMaxWidth(0.86f),
+                        ) {
+                            SelectionContainer {
+                                Text(message.content, Modifier.padding(horizontal = 15.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, lineHeight = 23.sp)
+                            }
+                        }
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Surface(Modifier.size(25.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
+                            Icon(painterResource(com.example.moneycheck.R.drawable.nav_sparkles), contentDescription = null, modifier = Modifier.padding(5.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                        }
                         SelectionContainer {
-                            Text(
-                                message.content,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                color = if (message.role == "user") {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
+                            ChatMarkdown(message.content, Modifier.weight(1f))
                         }
                     }
                 }
@@ -413,31 +385,43 @@ internal fun ChatScreen(
             }
         }
 
-        Surface(tonalElevation = 3.dp) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 24.dp)) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 3.dp,
             ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Hỏi về giao dịch…") },
-                    enabled = !state.isSending && transactionCount > 0,
-                    minLines = 1,
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { send() }),
-                    shape = RoundedCornerShape(22.dp),
-                )
-                IconButton(
-                    onClick = { send() },
-                    enabled = input.isNotBlank() && !state.isSending && transactionCount > 0,
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Bottom,
                 ) {
-                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "Gửi")
+                    BasicTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        modifier = Modifier.weight(1f).padding(horizontal = 6.dp, vertical = 9.dp),
+                        enabled = !state.isSending && transactionCount > 0,
+                        maxLines = 4,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 19.sp, color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { send() }),
+                        decorationBox = { innerTextField ->
+                            Box {
+                                if (input.isEmpty()) Text("Hỏi về giao dịch của bạn…", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                innerTextField()
+                            }
+                        },
+                    )
+                    Button(
+                        onClick = { send() },
+                        enabled = input.isNotBlank() && !state.isSending && transactionCount > 0,
+                        modifier = Modifier.size(34.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        shape = RoundedCornerShape(6.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = "Gửi", modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }

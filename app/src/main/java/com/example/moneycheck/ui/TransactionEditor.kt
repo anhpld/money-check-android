@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -115,6 +116,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -208,31 +210,32 @@ internal fun TransactionEditorSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
         containerColor = MaterialTheme.colorScheme.surface,
+        scrimColor = Color.Black.copy(alpha = 0.55f),
         sheetGesturesEnabled = false,
         dragHandle = null,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f).imePadding(),
         ) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) {
+            Column(Modifier.padding(horizontal = 24.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     if (transaction == null) "Thêm giao dịch" else "Sửa giao dịch",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
                 )
-                Text(
-                    when {
-                        transaction == null -> "Nguồn: Thủ công"
-                        transaction.sourceType == TransactionSource.MANUAL -> "Nguồn: Thủ công"
-                        else -> "Nguồn: Tự động"
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Surface(color = if (transaction?.sourceType == TransactionSource.AUTOMATIC) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(4.dp)) {
+                    Text(
+                        if (transaction?.sourceType == TransactionSource.AUTOMATIC) "TỰ ĐỘNG" else "THỦ CÔNG",
+                        Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Column(
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text("Nguồn tiền", style = MaterialTheme.typography.titleSmall)
@@ -323,7 +326,7 @@ internal fun TransactionEditorSheet(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(7.dp),
                 ) {
                     Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         DirectionSegment("income", direction, "Tiền vào", Modifier.weight(1f)) { direction = "income" }
@@ -342,6 +345,21 @@ internal fun TransactionEditorSheet(
                     textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
                     singleLine = true,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    listOf(50_000L to "+50k", 100_000L to "+100k", 500_000L to "+500k", 1_000_000L to "+1tr").forEach { (value, label) ->
+                        OutlinedButton(
+                            onClick = { amount = ((amount.toLongOrNull() ?: 0L) + value).toString() },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        ) { Text(label, fontSize = 10.sp) }
+                    }
+                    TextButton(onClick = { amount = "" }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text("Xóa", fontSize = 10.sp)
+                    }
+                }
                 OutlinedTextField(
                     value = recipient,
                     onValueChange = { recipient = it },
@@ -450,6 +468,7 @@ internal fun TransactionEditorSheet(
         )
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
+            containerColor = MaterialTheme.colorScheme.background,
             title = { Text("Chọn giờ giao dịch") },
             text = { TimePicker(state = timePickerState) },
             dismissButton = {

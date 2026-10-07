@@ -116,6 +116,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -183,6 +184,8 @@ internal fun SettingsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var saved by rememberSaveable { mutableStateOf(false) }
     var modelMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var aiSettingsExpanded by rememberSaveable { mutableStateOf(false) }
+    var expandedRulePackage by rememberSaveable { mutableStateOf<String?>(null) }
     var promptEditorTarget by remember { mutableStateOf<PromptEditorTarget?>(null) }
 
     LaunchedEffect(openAiConnection.models) {
@@ -217,18 +220,18 @@ internal fun SettingsScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(26.dp),
     ) {
         stickyHeader {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 12.dp),
+                        .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
                     PageHeader(
-                        eyebrow = "Moneycheck",
+                        eyebrow = "THEO CÁCH CỦA BẠN",
                         title = "Cài đặt",
                         subtitle = "Quyền, AI và các prompt phân tích",
                         modifier = Modifier.weight(1f),
@@ -251,24 +254,34 @@ internal fun SettingsScreen(
             }
         }
 
-        if (saved) item { InlineMessage("Đã lưu cấu hình", modifier = Modifier.padding(horizontal = 18.dp)) }
+        if (saved) item { InlineMessage("Đã lưu cấu hình", modifier = Modifier.padding(horizontal = 24.dp)) }
 
         item {
             SettingsSection(
                 title = "Công cụ thông báo",
                 subtitle = "Hộp thư, nhật ký và mẫu kiểm thử — không phải sổ giao dịch.",
-                modifier = Modifier.padding(horizontal = 18.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
             ) {
-                TextButton(onClick = { onOpenTool(SettingsDestination.INBOX) }) { Text("Hộp thư") }
-                TextButton(onClick = { onOpenTool(SettingsDestination.AUTO_MATCHED) }) { Text("Đã bắt") }
-                TextButton(onClick = { onOpenTool(SettingsDestination.SAVED) }) { Text("Đã lưu") }
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(10.dp),
+                    shadowElevation = 3.dp,
+                ) {
+                    Column(Modifier.padding(horizontal = 14.dp)) {
+                        SettingsToolRow(Icons.Outlined.Inbox, "Hộp thư", "Thông báo trong 24 giờ") { onOpenTool(SettingsDestination.INBOX) }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                        SettingsToolRow(Icons.Outlined.Notifications, "Đã bắt", "Theo dõi thông báo khớp quy tắc") { onOpenTool(SettingsDestination.AUTO_MATCHED) }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                        SettingsToolRow(Icons.Outlined.StarBorder, "Đã lưu", "Mẫu thông báo để kiểm thử") { onOpenTool(SettingsDestination.SAVED) }
+                    }
+                }
             }
         }
         item {
             SettingsSection(
                 title = "Quyền và hiển thị",
                 subtitle = "Kiểm soát việc đọc và xác nhận notification.",
-                modifier = Modifier.padding(horizontal = 18.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
             ) {
                 PermissionRow(
                     title = "Đọc notification",
@@ -307,8 +320,23 @@ internal fun SettingsScreen(
             SettingsSection(
                 title = "AI tương thích OpenAI",
                 subtitle = "Dùng OpenAI, 9router hoặc dịch vụ có API tương thích.",
-                modifier = Modifier.padding(horizontal = 18.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
             ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clickable { aiSettingsExpanded = !aiSettingsExpanded },
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(8.dp),
+                    shadowElevation = 2.dp,
+                ) {
+                    Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("Cấu hình AI nâng cao", style = MaterialTheme.typography.titleSmall)
+                            Text(if (aiSettingsExpanded) "Thu gọn" else "Base URL, API key, model", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(if (aiSettingsExpanded) "⌄" else "›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (aiSettingsExpanded) {
                 OutlinedTextField(
                     value = apiBaseUrl,
                     onValueChange = {
@@ -399,6 +427,7 @@ internal fun SettingsScreen(
                         saved = false
                     },
                 )
+                }
             }
         }
 
@@ -406,7 +435,7 @@ internal fun SettingsScreen(
             SettingsSection(
                 title = "Ứng dụng tự động phân tích",
                 subtitle = "Đã chọn ${notificationRuleInputs.size} ứng dụng. Chỉ notification khớp title mới gọi LLM và hiện bảng xác nhận.",
-                modifier = Modifier.padding(horizontal = 18.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
             ) {
                 OutlinedTextField(
                     value = query,
@@ -438,6 +467,8 @@ internal fun SettingsScreen(
                 AppSelectionRow(
                     app = app,
                     checked = true,
+                    expanded = expandedRulePackage == app.packageName,
+                    onToggleExpanded = { expandedRulePackage = if (expandedRulePackage == app.packageName) null else app.packageName },
                     onCheckedChange = {
                         notificationRuleInputs = notificationRuleInputs - app.packageName
                         saved = false
@@ -447,7 +478,7 @@ internal fun SettingsScreen(
                         notificationRuleInputs = notificationRuleInputs + (app.packageName to titles)
                         saved = false
                     },
-                    modifier = Modifier.padding(horizontal = 18.dp),
+                    modifier = Modifier.padding(horizontal = 24.dp),
                 )
             }
         }
@@ -462,7 +493,7 @@ internal fun SettingsScreen(
                     notificationRuleInputs = notificationRuleInputs + (app.packageName to "")
                     saved = false
                 },
-                modifier = Modifier.padding(horizontal = 18.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
             )
         }
 
@@ -470,7 +501,7 @@ internal fun SettingsScreen(
             SettingsSection(
                 title = "Dữ liệu",
                 subtitle = "Sao lưu database SQLite để mở bằng ứng dụng đọc SQLite hoặc lưu trữ ở nơi khác.",
-                modifier = Modifier.padding(horizontal = 18.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
             ) {
                 Text(
                     "File xuất ra chứa dữ liệu giao dịch và notification. API key cùng cấu hình ứng dụng không được đưa vào file.",
@@ -521,7 +552,7 @@ internal fun PromptPreviewCard(
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -586,8 +617,9 @@ internal fun PromptEditorSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
         containerColor = MaterialTheme.colorScheme.surface,
+        scrimColor = Color.Black.copy(alpha = 0.55f),
         sheetGesturesEnabled = false,
         dragHandle = null,
     ) {
@@ -647,20 +679,27 @@ internal fun SettingsSection(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(22.dp),
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Text(title.uppercase(), fontSize = 9.sp, letterSpacing = 0.65.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    }
+}
+
+@Composable
+private fun SettingsToolRow(icon: ImageVector, title: String, description: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            content()
+        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(33.dp).padding(7.dp), tint = MaterialTheme.colorScheme.primary)
         }
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(description, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleLarge)
     }
 }
 
@@ -674,9 +713,7 @@ internal fun PermissionRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        color = MaterialTheme.colorScheme.background,
     ) {
         Row(
             Modifier.padding(start = 13.dp, top = 11.dp, bottom = 11.dp, end = 9.dp),
@@ -704,9 +741,7 @@ internal fun PermissionRow(
 internal fun SettingToggleRow(title: String, description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        color = MaterialTheme.colorScheme.background,
     ) {
         Row(Modifier.padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {

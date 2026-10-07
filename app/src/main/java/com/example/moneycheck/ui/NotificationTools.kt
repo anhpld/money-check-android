@@ -3,6 +3,7 @@ package com.example.moneycheck.ui
 import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +57,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -163,12 +165,12 @@ internal fun NotificationInboxScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
+        contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             PageHeader(
-                eyebrow = "Moneycheck",
+                eyebrow = "CÔNG CỤ THÔNG BÁO",
                 title = "Hộp thư",
                 subtitle = "Notification mới nhận được giữ tạm trong 24 giờ.",
                 eyebrowPill = false,
@@ -179,12 +181,14 @@ internal fun NotificationInboxScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().shadow(3.dp, MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.medium),
                 label = { Text("Tìm ứng dụng") },
                 placeholder = { Text("Tên app hoặc package") },
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.medium,
+                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.Transparent),
             )
         }
         item {
@@ -246,12 +250,12 @@ internal fun SavedNotificationScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
+        contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             PageHeader(
-                eyebrow = "Moneycheck",
+                eyebrow = "CÔNG CỤ THÔNG BÁO",
                 title = "Đã lưu",
                 subtitle = "Các mẫu notification được giữ lại để test phân tích.",
                 eyebrowPill = false,
@@ -340,13 +344,13 @@ internal fun AutoMatchedNotificationScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
+        contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             PageHeader(
-                eyebrow = "Moneycheck",
-                title = "Đã bắt tự động",
+                eyebrow = "CÔNG CỤ THÔNG BÁO",
+                title = "Đã bắt",
                 subtitle = "Notification đã match rule, được giữ lại trước khi gọi AI.",
                 eyebrowPill = false,
             )
@@ -441,9 +445,8 @@ internal fun NotificationCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        shape = RoundedCornerShape(8.dp),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Row(verticalAlignment = Alignment.Top) {

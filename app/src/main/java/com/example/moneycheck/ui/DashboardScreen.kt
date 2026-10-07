@@ -111,6 +111,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
@@ -242,13 +243,13 @@ internal fun TransactionScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {
             Row(verticalAlignment = Alignment.Top) {
                 PageHeader(
-                    eyebrow = "Moneycheck",
+                    eyebrow = "MỘT CHÚT RÕ RÀNG, MỖI NGÀY",
                     title = "Tổng quan",
                     subtitle = if (filterStartEpochDay != null && filterEndEpochDay != null) {
                         "${formatEpochDay(requireNotNull(filterStartEpochDay))} – ${formatEpochDay(requireNotNull(filterEndEpochDay))}"
@@ -277,26 +278,53 @@ internal fun TransactionScreen(
                 net = net,
                 income = income,
                 expense = expense,
-                periodLabel = if (filterStartEpochDay == null) "Tất cả" else "Đã lọc",
+                transactionCount = filteredTransactions.size,
             )
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionHeader(
-                    title = "Giao dịch gần đây",
-                    trailing = "${filteredTransactions.size} giao dịch",
-                    subtitle = if (filterStartEpochDay == null) "Các khoản đã được xác nhận" else "Trong khoảng ngày đã chọn",
-                )
-                DateFilterCard(
-                    startEpochDay = filterStartEpochDay,
-                    endEpochDay = filterEndEpochDay,
-                    resultCount = filteredTransactions.size,
-                    onOpen = { showDateFilter = true },
-                    onClear = {
-                        filterStartEpochDay = null
-                        filterEndEpochDay = null
-                    },
-                )
+            val spentPercent = if (income > 0) (expense * 100 / income).coerceAtMost(999) else 0
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                    Icon(painterResource(com.example.moneycheck.R.drawable.arrow_up_right_lucide), contentDescription = null, modifier = Modifier.padding(7.dp).size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(if (income >= expense) "Thu nhiều hơn chi" else "Chi nhiều hơn thu", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    Text("$spentPercent% thu nhập đã được chi tiêu", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(14, 19, 13, 24, 18, 28, 22).forEachIndexed { index, height ->
+                        Box(
+                            Modifier.size(width = 4.dp, height = height.dp).background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = if (index >= 5) 0.9f else 0.6f),
+                                RoundedCornerShape(2.dp),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        item { HorizontalDivider(color = MaterialTheme.colorScheme.outline) }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Giao dịch gần đây", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Text(filteredTransactions.size.toString(), Modifier.padding(horizontal = 7.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = { showDateFilter = true }, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)) {
+                    Icon(Icons.Outlined.DateRange, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (filterStartEpochDay == null) "Lọc ngày" else "Đã lọc", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            if (filterStartEpochDay != null && filterEndEpochDay != null) {
+                TextButton(onClick = { filterStartEpochDay = null; filterEndEpochDay = null }) {
+                    Text("${formatEpochDay(requireNotNull(filterStartEpochDay))} – ${formatEpochDay(requireNotNull(filterEndEpochDay))}  ×", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
         if (filteredTransactions.isEmpty()) {
@@ -400,6 +428,7 @@ internal fun TransactionScreen(
     if (isAnalyzingImage) {
         AlertDialog(
             onDismissRequest = {},
+            containerColor = MaterialTheme.colorScheme.background,
             properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
             text = {
                 Row(

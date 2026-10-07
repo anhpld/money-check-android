@@ -17,6 +17,7 @@ import com.example.moneycheck.llm.OpenAiClient
 import com.example.moneycheck.llm.OpenAiCompatibleEndpoint
 import com.example.moneycheck.llm.OpenAiModelsClient
 import com.example.moneycheck.llm.TransactionChatClient
+import com.example.moneycheck.llm.exactTransactionCountAnswer
 import com.example.moneycheck.notification.ConfirmationNotifier
 import com.example.moneycheck.settings.AppSettings
 import com.example.moneycheck.settings.InstalledApp
@@ -401,6 +402,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun sendChatMessage(input: String) {
         val question = input.trim()
         if (question.isEmpty() || _chatState.value.isSending) return
+
+        exactTransactionCountAnswer(question, transactions.value.size)?.let { answer ->
+            val current = _chatState.value
+            _chatState.value = current.copy(
+                messages = current.messages +
+                    ChatMessage(id = System.nanoTime(), role = "user", content = question) +
+                    ChatMessage(id = System.nanoTime(), role = "assistant", content = answer),
+                errorMessage = null,
+            )
+            return
+        }
 
         val apiKey = appSettings.apiKey().orEmpty()
         if (apiKey.isBlank()) {

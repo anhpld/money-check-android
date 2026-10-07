@@ -108,6 +108,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
@@ -146,6 +147,7 @@ import java.time.format.DateTimeFormatter
 internal fun PendingConfirmationScreen(
     notifications: List<NotificationWithDraft>,
     onReview: (Long) -> Unit,
+    onQuickConfirm: (NotificationWithDraft) -> Unit,
     onCancel: (Long) -> Unit,
     onCancelAll: (List<Long>) -> Unit,
     modifier: Modifier = Modifier,
@@ -155,32 +157,30 @@ internal fun PendingConfirmationScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, top = 22.dp, end = 18.dp, bottom = 90.dp),
+        contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             PageHeader(
-                eyebrow = "Moneycheck",
+                eyebrow = "KIỂM TRA TRƯỚC KHI LƯU",
                 title = "Cần xác nhận",
-                subtitle = "Kiểm tra các giao dịch đã phân tích trước khi lưu vào Tổng quan.",
+                subtitle = "${notifications.size} bản nháp đang chờ",
                 eyebrowPill = false,
             )
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionHeader(
-                    title = "Chờ xử lý",
-                    trailing = "${notifications.size} giao dịch",
-                    subtitle = "Soát lại số tiền, người nhận và nội dung",
-                )
-                if (notifications.isNotEmpty()) {
-                    CompactListAction(
-                        title = "Hủy toàn bộ hàng chờ",
-                        description = "Xóa ${notifications.size} kết quả phân tích chưa lưu",
-                        actionLabel = "Hủy tất cả",
-                        danger = true,
+            if (notifications.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    OutlinedButton(
                         onClick = { showCancelAllConfirmation = true },
-                    )
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                        ),
+                    ) {
+                        Text("Hủy toàn bộ hàng chờ", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
@@ -197,6 +197,7 @@ internal fun PendingConfirmationScreen(
                 PendingConfirmationCard(
                     item = item,
                     onReview = { onReview(item.notification.id) },
+                    onQuickConfirm = { onQuickConfirm(item) },
                     onCancel = { itemToCancel = item },
                 )
             }
@@ -234,6 +235,7 @@ internal fun PendingConfirmationScreen(
 internal fun PendingConfirmationCard(
     item: NotificationWithDraft,
     onReview: () -> Unit,
+    onQuickConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val draft = requireNotNull(item.draft)
@@ -241,7 +243,7 @@ internal fun PendingConfirmationCard(
     val expense = draft.direction == "expense"
     val amountColor = when {
         income -> IncomeStrong
-        expense -> MaterialTheme.colorScheme.error
+        expense -> ExpenseStrong
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val directionLabel = when (draft.direction) {
@@ -255,23 +257,33 @@ internal fun PendingConfirmationCard(
         else -> ""
     }
     val transactionTime = draft.transactionTime ?: item.notification.postedAt
+    val canQuickConfirm = draft.direction in setOf("income", "expense") &&
+        (draft.amount ?: 0L) > 0L && draft.recipient.isNotBlank() && draft.purpose.isNotBlank()
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        shape = RoundedCornerShape(8.dp),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                    Text("CHỜ XÁC NHẬN", Modifier.padding(horizontal = 7.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.labelSmall)
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onCancel, modifier = Modifier.size(30.dp)) {
+                    Text("×", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
+                }
+            }
             Row(verticalAlignment = Alignment.Top) {
-                AppAvatar(item.notification.appName, item.notification.packageName, size = 42)
+                AppAvatar(item.notification.appName, item.notification.packageName, size = 36)
                 Spacer(Modifier.width(11.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
                         draft.purpose.ifBlank { "Chưa xác định mục đích" },
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -302,37 +314,40 @@ internal fun PendingConfirmationCard(
                             )
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            draft.recipient.ifBlank { "Chưa xác định người nhận" },
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            draft.amount?.let { amountPrefix + formatMoney(it) } ?: "Chưa rõ",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = amountColor,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                        )
-                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = CircleShape, color = if (income) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer) {
+                    Icon(
+                        painterResource(if (income) com.example.moneycheck.R.drawable.arrow_down_left_lucide else com.example.moneycheck.R.drawable.arrow_up_right_lucide),
+                        contentDescription = null,
+                        modifier = Modifier.padding(7.dp).size(19.dp),
+                        tint = if (income) IncomeStrong else MaterialTheme.colorScheme.error,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(directionLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(draft.amount?.let { amountPrefix + formatMoney(it) } ?: "Chưa rõ", style = MaterialTheme.typography.titleLarge, color = amountColor, fontWeight = FontWeight.SemiBold)
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(
-                    onClick = onCancel,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    Text("Hủy")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Người nhận", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(draft.recipient.ifBlank { "Chưa xác định" }, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onReview, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)) {
+                    Text("Xem và sửa", style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
-                Button(onClick = onReview, modifier = Modifier.weight(1f)) {
-                    Text("Xem và lưu")
+                Button(
+                    onClick = onQuickConfirm,
+                    enabled = canQuickConfirm,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                    shape = RoundedCornerShape(6.dp),
+                ) {
+                    Text("✓  Duyệt nhanh", style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
             }
         }

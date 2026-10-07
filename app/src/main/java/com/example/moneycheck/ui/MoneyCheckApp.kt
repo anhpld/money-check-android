@@ -15,10 +15,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -108,6 +111,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
@@ -115,6 +119,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -144,13 +149,12 @@ import java.time.format.DateTimeFormatter
 
 private enum class MainTab(
     val label: String,
-    val selectedIcon: ImageVector,
-    val unselectedIcon: ImageVector,
+    val iconRes: Int,
 ) {
-    TRANSACTIONS("Tổng quan", Icons.Filled.BarChart, Icons.Outlined.BarChart),
-    PENDING("Duyệt", Icons.Filled.Schedule, Icons.Outlined.Schedule),
-    CHAT("Trợ lý", Icons.AutoMirrored.Filled.Chat, Icons.AutoMirrored.Outlined.Chat),
-    SETTINGS("Cài đặt", Icons.Filled.Settings, Icons.Outlined.Settings),
+    TRANSACTIONS("Tổng quan", com.example.moneycheck.R.drawable.nav_layout_grid),
+    PENDING("Duyệt", com.example.moneycheck.R.drawable.nav_list_checks),
+    CHAT("Trợ lý", com.example.moneycheck.R.drawable.nav_sparkles),
+    SETTINGS("Cài đặt", com.example.moneycheck.R.drawable.nav_settings_2),
 }
 
 
@@ -203,42 +207,71 @@ fun MoneyCheckApp(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp,
-            ) {
-                MainTab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == tab,
-                        onClick = { selectedTab = tab },
-                        icon = {
-                            if (tab == MainTab.PENDING && pendingConfirmations.isNotEmpty()) {
-                                BadgedBox(badge = { Badge { Text(pendingConfirmations.size.toString()) } }) {
-                                    Icon(
-                                        imageVector = if (selectedTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = tab.label,
-                                    )
-                                }
-                            } else {
-                                Icon(
-                                    imageVector = if (selectedTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                                    contentDescription = tab.label,
-                                )
-                            }
+        topBar = {
+            Column(Modifier.background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
+                        Modifier.size(29.dp).background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("m", color = MaterialTheme.colorScheme.onPrimary, fontSize = 23.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
+                        Text("✓", Modifier.align(Alignment.BottomEnd).offset(x = (-2).dp, y = 1.dp), color = MaterialTheme.colorScheme.onPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, lineHeight = 12.sp)
+                    }
+                    Text(
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            append("moneycheck")
+                            pushStyle(androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary))
+                            append(".")
+                            pop()
                         },
-                        label = {
-                            Text(
-                                text = tab.label,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
-                            )
-                        },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                     )
+                }
+            }
+        },
+        bottomBar = {
+            Column(Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)).navigationBarsPadding()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(start = 15.dp, end = 15.dp, top = 10.dp, bottom = 2.dp),
+                ) {
+                    MainTab.entries.forEach { tab ->
+                        val selected = selectedTab == tab
+                        val itemColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        Column(
+                            modifier = Modifier.weight(1f).height(52.dp).clickable { selectedTab = tab },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier.width(47.dp).height(31.dp)
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                        androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(painter = painterResource(tab.iconRes), contentDescription = null, modifier = Modifier.size(21.dp), tint = itemColor)
+                                if (tab == MainTab.PENDING && pendingConfirmations.isNotEmpty()) {
+                                    Box(
+                                        modifier = Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-5).dp)
+                                            .size(17.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                                            .background(Color(0xFFF9F4E6)),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(pendingConfirmations.size.toString(), fontSize = 8.sp, color = Color(0xFF9E7525), lineHeight = 10.sp)
+                                    }
+                                }
+                            }
+                            Text(tab.label, color = itemColor, fontSize = 9.sp, fontWeight = FontWeight.Medium, lineHeight = 11.sp)
+                        }
+                    }
                 }
             }
         },
@@ -282,6 +315,18 @@ fun MoneyCheckApp(
             MainTab.PENDING -> PendingConfirmationScreen(
                 notifications = pendingConfirmations,
                 onReview = viewModel::requestConfirmation,
+                onQuickConfirm = { item ->
+                    item.draft?.let { draft ->
+                        viewModel.confirmTransaction(
+                            notification = item.notification,
+                            direction = draft.direction,
+                            amount = draft.amount ?: 0L,
+                            recipient = draft.recipient,
+                            purpose = draft.purpose,
+                            transactionTime = draft.transactionTime ?: item.notification.postedAt,
+                        )
+                    }
+                },
                 onCancel = viewModel::cancelPendingConfirmation,
                 onCancelAll = viewModel::cancelAllPendingConfirmations,
                 modifier = Modifier.padding(innerPadding),
