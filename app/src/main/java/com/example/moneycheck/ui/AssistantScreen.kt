@@ -417,28 +417,11 @@ internal fun ChatScreen(
                         }
                     }
                 } else {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalAlignment = Alignment.Top,
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterStart,
                     ) {
-                        Surface(
-                            modifier = Modifier
-                                .size(25.dp)
-                                .padding(top = 4.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary,
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    painter = painterResource(com.example.moneycheck.R.drawable.nav_sparkles),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(15.dp),
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                )
-                            }
-                        }
-                        SelectionContainer(modifier = Modifier.weight(1f).padding(vertical = 2.dp)) {
+                        SelectionContainer {
                             ChatMarkdown(message.content)
                         }
                     }

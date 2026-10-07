@@ -160,7 +160,7 @@ private fun inlineMarkdown(source: String) = buildAnnotatedString {
         when {
             token.startsWith("**") || token.startsWith("__") -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(token.substring(2, token.length - 2)) }
             token.startsWith("~~") -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(token.substring(2, token.length - 2)) }
-            token.startsWith("`") -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0xFFE5EBE7))) { append(token.substring(1, token.length - 1)) }
+            token.startsWith("`") -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)) { append(token.substring(1, token.length - 1)) }
             token.startsWith("[") -> {
                 val link = Regex("^\\[([^]]+)]\\((https?://[^)\\s]+)\\)$").matchEntire(token)
                 if (link != null) withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)) { append(link.groupValues[1]) }
