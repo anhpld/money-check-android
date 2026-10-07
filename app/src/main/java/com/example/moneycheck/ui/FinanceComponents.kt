@@ -162,11 +162,11 @@ private val AppIconCache = object : LruCache<String, ImageBitmap>(64) {}
 internal fun PageHeader(
     eyebrow: String,
     title: String,
-    subtitle: String,
+    subtitle: String = "",
     modifier: Modifier = Modifier,
     eyebrowPill: Boolean = true,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             eyebrow.uppercase(),
             fontSize = 8.sp,
@@ -176,7 +176,9 @@ internal fun PageHeader(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(title, fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold)
-        Text(subtitle, fontSize = 11.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (subtitle.isNotBlank()) {
+            Text(subtitle, fontSize = 11.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

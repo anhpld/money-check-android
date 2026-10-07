@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
@@ -68,6 +69,8 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
@@ -109,6 +112,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
@@ -189,6 +193,8 @@ internal fun SettingsScreen(
     var expandedRulePackage by rememberSaveable { mutableStateOf<String?>(null) }
     var promptEditorTarget by remember { mutableStateOf<PromptEditorTarget?>(null) }
     var showImportConfirmDialog by rememberSaveable { mutableStateOf(false) }
+    var showAddAppSheet by rememberSaveable { mutableStateOf(false) }
+    var showApiKey by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(openAiConnection.models) {
         if (openAiConnection.models.isNotEmpty() && model !in openAiConnection.models) model = openAiConnection.models.first()
@@ -222,7 +228,7 @@ internal fun SettingsScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(26.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         stickyHeader {
             Surface(color = MaterialTheme.colorScheme.background) {
@@ -230,19 +236,18 @@ internal fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 12.dp),
-                    verticalAlignment = Alignment.Top,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     PageHeader(
                         eyebrow = "THEO CÁCH CỦA BẠN",
                         title = "Cài đặt",
-                        subtitle = "Quyền, AI và các prompt phân tích",
+                        subtitle = "",
                         modifier = Modifier.weight(1f),
                         eyebrowPill = false,
                     )
                     Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = {
-                            // Also reconcile at the save boundary if an effect has not run yet.
                             reconcilePersistedMaps()
                             val rules = notificationRuleInputs.mapValues { (_, input) ->
                                 input.lineSequence().map(String::trim).filter(String::isNotEmpty).toSet()
@@ -250,8 +255,26 @@ internal fun SettingsScreen(
                             onSaveLocal(prompt, rules, overlayEnabled)
                             saved = true
                         },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-                    ) { Text("Lưu tùy chọn") }
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF006A47),
+                            contentColor = Color.White,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.height(36.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            if (saved) "Đã lưu" else "Lưu tùy chọn",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
         }
@@ -261,59 +284,94 @@ internal fun SettingsScreen(
         item {
             SettingsSection(
                 title = "Công cụ thông báo",
-                subtitle = "Hộp thư, nhật ký và mẫu kiểm thử — không phải sổ giao dịch.",
                 modifier = Modifier.padding(horizontal = 24.dp),
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(10.dp),
-                    shadowElevation = 3.dp,
-                ) {
-                    Column(Modifier.padding(horizontal = 14.dp)) {
-                        SettingsToolRow(Icons.Outlined.Inbox, "Hộp thư", "Thông báo trong 24 giờ") { onOpenTool(SettingsDestination.INBOX) }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                        SettingsToolRow(Icons.Outlined.Notifications, "Đã bắt", "Theo dõi thông báo khớp quy tắc") { onOpenTool(SettingsDestination.AUTO_MATCHED) }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                        SettingsToolRow(Icons.Outlined.StarBorder, "Đã lưu", "Mẫu thông báo để kiểm thử") { onOpenTool(SettingsDestination.SAVED) }
-                    }
+                SettingsCard {
+                    SettingsRow(
+                        iconRes = com.example.moneycheck.R.drawable.inbox_lucide,
+                        title = "Hộp thư",
+                        subtitle = "Thông báo trong 24 giờ",
+                        onClick = { onOpenTool(SettingsDestination.INBOX) },
+                    )
+                    HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+                    SettingsRow(
+                        iconRes = com.example.moneycheck.R.drawable.scan_line_lucide,
+                        title = "Đã bắt",
+                        subtitle = "Theo dõi thông báo khớp quy tắc",
+                        onClick = { onOpenTool(SettingsDestination.AUTO_MATCHED) },
+                    )
+                    HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+                    SettingsRow(
+                        iconRes = com.example.moneycheck.R.drawable.bookmark_lucide,
+                        title = "Đã lưu",
+                        subtitle = "Mẫu thông báo để kiểm thử",
+                        onClick = { onOpenTool(SettingsDestination.SAVED) },
+                    )
                 }
             }
         }
+
         item {
             SettingsSection(
                 title = "Quyền và hiển thị",
-                subtitle = "Kiểm soát việc đọc và xác nhận notification.",
                 modifier = Modifier.padding(horizontal = 24.dp),
             ) {
-                PermissionRow(
-                    title = "Đọc notification",
-                    description = if (hasNotificationAccess) "Đang hứng notification từ mọi ứng dụng" else "Cần cấp quyền để mở hộp thư 24 giờ",
-                    granted = hasNotificationAccess,
-                    actionLabel = "Thiết lập",
-                    onAction = onOpenNotificationAccess,
-                )
-                PermissionRow(
-                    title = "Notification xác nhận",
-                    description = if (canPostConfirmations) "Heads-up notification đang hoạt động" else "Đang bị tắt trong Android",
-                    granted = canPostConfirmations,
-                    actionLabel = "Mở cài đặt",
-                    onAction = onRequestPostNotifications,
-                )
-                SettingToggleRow(
-                    title = "Popup xác nhận nổi",
-                    description = "Hiện bảng xác nhận trượt từ dưới lên trên ứng dụng đang sử dụng",
-                    checked = overlayEnabled,
-                    onCheckedChange = { enabled ->
-                        overlayEnabled = enabled
-                        saved = false
-                        if (enabled && !canDrawOverlays) onRequestOverlayPermission()
-                    },
-                )
-                if (overlayEnabled && !canDrawOverlays) {
-                    InlineMessage("Cần cấp quyền “Hiển thị trên ứng dụng khác”. Notification vẫn được dùng làm dự phòng.", error = true)
-                    OutlinedButton(onClick = onRequestOverlayPermission, modifier = Modifier.fillMaxWidth()) { Text("Cấp quyền popup nổi") }
-                } else if (overlayEnabled) {
-                    InlineMessage("Popup nổi đã sẵn sàng")
+                SettingsCard {
+                    SettingsPermissionRow(
+                        iconRes = com.example.moneycheck.R.drawable.bell_lucide,
+                        title = "Đọc thông báo",
+                        granted = hasNotificationAccess,
+                        onAction = onOpenNotificationAccess,
+                    )
+                    HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+                    SettingsPermissionRow(
+                        iconRes = com.example.moneycheck.R.drawable.bell_ring_lucide,
+                        title = "Thông báo xác nhận",
+                        granted = canPostConfirmations,
+                        onAction = onRequestPostNotifications,
+                    )
+                    HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+                    SettingsToggleRow(
+                        iconRes = com.example.moneycheck.R.drawable.sliders_horizontal_lucide,
+                        title = "Popup xác nhận nổi",
+                        subtitle = "Xác nhận khi Moneycheck ở nền",
+                        checked = overlayEnabled,
+                        onCheckedChange = { enabled ->
+                            overlayEnabled = enabled
+                            saved = false
+                            if (enabled && !canDrawOverlays) onRequestOverlayPermission()
+                        },
+                    )
+                    if (overlayEnabled && !canDrawOverlays) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp)
+                                .clickable(onClick = onRequestOverlayPermission),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                "Cần quyền hiển thị trên ứng dụng khác.",
+                                fontSize = 11.sp,
+                                color = Color(0xFFDC2626),
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Cấp quyền",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF006A47),
+                                )
+                                Icon(
+                                    painterResource(com.example.moneycheck.R.drawable.chevron_right_lucide),
+                                    contentDescription = null,
+                                    tint = Color(0xFF006A47),
+                                    modifier = Modifier.size(13.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -321,114 +379,188 @@ internal fun SettingsScreen(
         item {
             SettingsSection(
                 title = "AI tương thích OpenAI",
-                subtitle = "Dùng OpenAI, 9router hoặc dịch vụ có API tương thích.",
                 modifier = Modifier.padding(horizontal = 24.dp),
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().clickable { aiSettingsExpanded = !aiSettingsExpanded },
-                    color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(8.dp),
-                    shadowElevation = 2.dp,
-                ) {
-                    Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text("Cấu hình AI nâng cao", style = MaterialTheme.typography.titleSmall)
-                            Text(if (aiSettingsExpanded) "Thu gọn" else "Base URL, API key, model", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SettingsCard {
+                    SettingsRow(
+                        iconRes = com.example.moneycheck.R.drawable.sparkles_lucide,
+                        title = "Cấu hình AI nâng cao",
+                        subtitle = if (aiSettingsExpanded) "Thu gọn" else "Base URL, API key, model",
+                        onClick = { aiSettingsExpanded = !aiSettingsExpanded },
+                        endContent = {
+                            Text(
+                                if (aiSettingsExpanded) "⌄" else "›",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF94A3B8),
+                            )
                         }
-                        Text(if (aiSettingsExpanded) "⌄" else "›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    )
                 }
                 if (aiSettingsExpanded) {
-                OutlinedTextField(
-                    value = apiBaseUrl,
-                    onValueChange = {
-                        apiBaseUrl = it
-                        saved = false
-                        onApiKeyChanged()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("API base URL") },
-                    placeholder = { Text("http://localhost:20128") },
-                    supportingText = { Text("Chấp nhận URL gốc hoặc URL có /v1; ứng dụng tự nối endpoint") },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
-                )
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = {
-                        apiKey = it
-                        saved = false
-                        onApiKeyChanged()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("API key") },
-                    placeholder = { Text(if (settings.hasApiKey) "Đã lưu •••• · để trống để giữ nguyên" else "API key") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(
-                        onClick = { onValidateApiKey(apiBaseUrl, apiKey) },
-                        enabled = !openAiConnection.isChecking && apiBaseUrl.isNotBlank() && (apiKey.isNotBlank() || settings.hasApiKey),
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.White,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        shadowElevation = 1.dp,
                     ) {
-                        if (openAiConnection.isChecking) {
-                            CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Đang kiểm tra")
-                        } else Text("Kiểm tra kết nối")
-                    }
-                    if (settings.hasApiKey) TextButton(onClick = { onClearApiKey(); apiKey = "" }) { Text("Xóa key") }
-                }
-                Button(onClick = {
-                    if (onSaveAi(apiBaseUrl, model, apiKey)) apiKey = ""
-                }, enabled = canSave) { Text("Lưu kết nối AI") }
-                Text("Tùy chọn cục bộ được lưu riêng, không cần API key hoặc mạng.", style = MaterialTheme.typography.bodySmall)
-                openAiConnection.errorMessage?.let { InlineMessage(it, error = true) }
-                if (openAiConnection.isVerified) {
-                    InlineMessage("Kết nối thành công · ${openAiConnection.models.size} model khả dụng")
-                    Text("Model đang dùng", style = MaterialTheme.typography.titleSmall)
-                    Box(Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { modelMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text(model, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("⌄")
-                        }
-                        DropdownMenu(
-                            expanded = modelMenuExpanded,
-                            onDismissRequest = { modelMenuExpanded = false },
-                            modifier = Modifier.fillMaxWidth(0.9f),
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            openAiConnection.models.forEach { modelId ->
-                                DropdownMenuItem(
-                                    text = { Text(modelId) },
-                                    onClick = {
-                                        model = modelId
-                                        modelMenuExpanded = false
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("API base URL", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF475569))
+                                OutlinedTextField(
+                                    value = apiBaseUrl,
+                                    onValueChange = {
+                                        apiBaseUrl = it
                                         saved = false
+                                        onApiKeyChanged()
                                     },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("https://api.openai.com/v1", fontSize = 12.sp) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
                                 )
                             }
+
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("API key", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF475569))
+                                OutlinedTextField(
+                                    value = apiKey,
+                                    onValueChange = {
+                                        apiKey = it
+                                        saved = false
+                                        onApiKeyChanged()
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text(if (settings.hasApiKey) "Đã lưu •••• (để trống giữ nguyên)" else "Nhập API key", fontSize = 12.sp) },
+                                    visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                                    trailingIcon = {
+                                        IconButton(onClick = { showApiKey = !showApiKey }) {
+                                            Text(if (showApiKey) "Ẩn" else "Hiện", fontSize = 11.sp, color = Color(0xFF64748B))
+                                        }
+                                    },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                OutlinedButton(
+                                    onClick = { onValidateApiKey(apiBaseUrl, apiKey) },
+                                    enabled = !openAiConnection.isChecking && apiBaseUrl.isNotBlank() && (apiKey.isNotBlank() || settings.hasApiKey),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(36.dp),
+                                ) {
+                                    if (openAiConnection.isChecking) {
+                                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Đang kiểm tra", fontSize = 11.sp)
+                                    } else {
+                                        Icon(painterResource(com.example.moneycheck.R.drawable.refresh_cw_lucide), contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Kiểm tra kết nối", fontSize = 11.sp)
+                                    }
+                                }
+                                if (settings.hasApiKey) {
+                                    TextButton(
+                                        onClick = { onClearApiKey(); apiKey = "" },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(36.dp),
+                                    ) {
+                                        Text("Xóa key", fontSize = 11.sp, color = Color(0xFFDC2626))
+                                    }
+                                }
+                            }
+
+                            openAiConnection.errorMessage?.let {
+                                Text(it, fontSize = 11.sp, color = Color(0xFFDC2626))
+                            }
+                            if (openAiConnection.isVerified) {
+                                Text(
+                                    "✓ Kết nối thành công · ${openAiConnection.models.size} model khả dụng",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF166534),
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Model phân tích", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF475569))
+                                    Box(Modifier.fillMaxWidth()) {
+                                        OutlinedButton(
+                                            onClick = { modelMenuExpanded = true },
+                                            modifier = Modifier.fillMaxWidth().height(40.dp),
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                        ) {
+                                            Text(model, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
+                                            Text("⌄", fontSize = 14.sp)
+                                        }
+                                        DropdownMenu(
+                                            expanded = modelMenuExpanded,
+                                            onDismissRequest = { modelMenuExpanded = false },
+                                            modifier = Modifier.fillMaxWidth(0.9f),
+                                        ) {
+                                            openAiConnection.models.forEach { modelId ->
+                                                DropdownMenuItem(
+                                                    text = { Text(modelId, fontSize = 12.sp) },
+                                                    onClick = {
+                                                        model = modelId
+                                                        modelMenuExpanded = false
+                                                        saved = false
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    if (onSaveAi(apiBaseUrl, model, apiKey)) apiKey = ""
+                                },
+                                enabled = canSave,
+                                modifier = Modifier.fillMaxWidth().height(40.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF006A47),
+                                    contentColor = Color.White,
+                                ),
+                            ) {
+                                Text("Lưu kết nối AI", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                            // Prompt notification
+                            PromptPreviewCard(
+                                title = "Prompt notification",
+                                subtitle = "Dùng cho notification tự động và mẫu trong Hộp thư/Đã lưu.",
+                                prompt = prompt,
+                                isCustom = prompt.trim() != AppSettings.DEFAULT_PROMPT.trim(),
+                                onEdit = {
+                                    promptEditorTarget = PromptEditorTarget(
+                                        title = "Prompt notification",
+                                        subtitle = "Chỉ title, text và expanded_content được gửi đi.",
+                                        prompt = prompt,
+                                        defaultPrompt = AppSettings.DEFAULT_PROMPT,
+                                    )
+                                },
+                                onReset = {
+                                    prompt = AppSettings.DEFAULT_PROMPT
+                                    saved = false
+                                },
+                            )
                         }
                     }
-                }
-                PromptPreviewCard(
-                    title = "Prompt notification",
-                    subtitle = "Dùng cho notification tự động và mẫu trong Hộp thư/Đã lưu.",
-                    prompt = prompt,
-                    isCustom = prompt.trim() != AppSettings.DEFAULT_PROMPT.trim(),
-                    onEdit = {
-                        promptEditorTarget = PromptEditorTarget(
-                            title = "Prompt notification",
-                            subtitle = "Chỉ title, text và expanded_content được gửi đi.",
-                            prompt = prompt,
-                            defaultPrompt = AppSettings.DEFAULT_PROMPT,
-                        )
-                    },
-                    onReset = {
-                        prompt = AppSettings.DEFAULT_PROMPT
-                        saved = false
-                    },
-                )
                 }
             }
         }
@@ -436,95 +568,126 @@ internal fun SettingsScreen(
         item {
             SettingsSection(
                 title = "Ứng dụng tự động phân tích",
-                subtitle = "Đã chọn ${notificationRuleInputs.size} ứng dụng. Chỉ notification khớp title mới gọi LLM và hiện bảng xác nhận.",
-                modifier = Modifier.padding(horizontal = 24.dp),
-            ) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it; saved = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Tìm tên app hoặc package") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
-                )
-                Text(
-                    "App không được chọn vẫn xuất hiện trong Hộp thư 24 giờ, nhưng không tự gọi AI và không bật bảng xác nhận.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (normalizedQuery.isNotBlank() && filteredApps.isEmpty()) {
-                    Text(
-                        "Không tìm thấy ứng dụng phù hợp.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        if (selectedApps.isNotEmpty()) {
-            item { ListCaption("Đang tự động phân tích", modifier = Modifier.padding(horizontal = 20.dp)) }
-            items(selectedApps, key = { "selected:${it.packageName}" }) { app ->
-                AppSelectionRow(
-                    app = app,
-                    checked = true,
-                    expanded = expandedRulePackage == app.packageName,
-                    onToggleExpanded = { expandedRulePackage = if (expandedRulePackage == app.packageName) null else app.packageName },
-                    onCheckedChange = {
-                        notificationRuleInputs = notificationRuleInputs - app.packageName
-                        saved = false
-                    },
-                    titleInput = notificationRuleInputs[app.packageName].orEmpty(),
-                    onTitleInputChanged = { titles ->
-                        notificationRuleInputs = notificationRuleInputs + (app.packageName to titles)
-                        saved = false
-                    },
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                )
-            }
-        }
-        if (filteredApps.isNotEmpty()) {
-            item { ListCaption("Kết quả tìm kiếm", modifier = Modifier.padding(horizontal = 20.dp)) }
-        }
-        items(filteredApps, key = InstalledApp::packageName) { app ->
-            AppSelectionRow(
-                app = app,
-                checked = false,
-                onCheckedChange = {
-                    notificationRuleInputs = notificationRuleInputs + (app.packageName to "")
-                    saved = false
+                action = {
+                    Surface(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .clickable { showAddAppSheet = true },
+                        color = Color(0xFFDCFCE7),
+                        shape = CircleShape,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                painterResource(com.example.moneycheck.R.drawable.plus_lucide),
+                                contentDescription = "Thêm ứng dụng",
+                                tint = Color(0xFF006A47),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
                 },
                 modifier = Modifier.padding(horizontal = 24.dp),
-            )
+            ) {
+                if (selectedApps.isEmpty()) {
+                    Text(
+                        "Chưa chọn ứng dụng nào.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF64748B),
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        selectedApps.forEach { app ->
+                            AppRuleCard(
+                                app = app,
+                                expanded = expandedRulePackage == app.packageName,
+                                onToggleExpanded = {
+                                    expandedRulePackage = if (expandedRulePackage == app.packageName) null else app.packageName
+                                },
+                                titleInput = notificationRuleInputs[app.packageName].orEmpty(),
+                                onTitleInputChanged = { titles ->
+                                    notificationRuleInputs = notificationRuleInputs + (app.packageName to titles)
+                                    saved = false
+                                },
+                                onDeleteRule = {
+                                    notificationRuleInputs = notificationRuleInputs - app.packageName
+                                    saved = false
+                                },
+                            )
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = { showAddAppSheet = true },
+                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                ) {
+                    Icon(
+                        painterResource(com.example.moneycheck.R.drawable.plus_lucide),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFF1A202C),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Thêm ứng dụng", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1A202C))
+                }
+            }
         }
 
         item {
             SettingsSection(
                 title = "Dữ liệu & Sao lưu",
-                subtitle = "Sao lưu toàn diện bao gồm cơ sở dữ liệu giao dịch và toàn bộ cấu hình ứng dụng.",
                 modifier = Modifier.padding(horizontal = 24.dp),
             ) {
-                Text(
-                    "Gói sao lưu (.zip) chứa toàn bộ cơ sở dữ liệu giao dịch, notification và các cấu hình API URL, Model, Rules. Hỗ trợ phục hồi cả gói sao lưu .zip mới lẫn file .db cũ.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedButton(
-                    onClick = onExportDatabase,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Xuất gói sao lưu (.zip)")
-                }
-                OutlinedButton(
-                    onClick = { showImportConfirmDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Nhập sao lưu (.zip hoặc .db)")
+                SettingsCard {
+                    SettingsRow(
+                        iconRes = com.example.moneycheck.R.drawable.download_lucide,
+                        title = "Xuất dữ liệu",
+                        subtitle = "Gói sao lưu (.zip)",
+                        onClick = onExportDatabase,
+                    )
+                    HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+                    SettingsRow(
+                        iconRes = com.example.moneycheck.R.drawable.download_lucide,
+                        title = "Nhập dữ liệu",
+                        subtitle = "Khôi phục từ file .zip hoặc .db",
+                        onClick = { showImportConfirmDialog = true },
+                    )
                 }
             }
         }
 
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("m", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF006A47))
+                    Text("✓", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Moneycheck", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A202C))
+                }
+                Text("Phiên bản 1.0", fontSize = 11.sp, color = Color(0xFF94A3B8))
+            }
+        }
+    }
+
+    if (showAddAppSheet) {
+        SelectAppSheet(
+            installedApps = installedApps,
+            selectedPackages = notificationRuleInputs.keys,
+            onDismiss = { showAddAppSheet = false },
+            onSelectApp = { app ->
+                notificationRuleInputs = notificationRuleInputs + (app.packageName to "")
+                saved = false
+            },
+        )
     }
 
     promptEditorTarget?.let { target ->
@@ -712,80 +875,393 @@ internal fun PromptEditorSheet(
 @Composable
 internal fun SettingsSection(
     title: String,
-    subtitle: String,
+    subtitle: String = "",
+    action: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-        Text(title.uppercase(), fontSize = 9.sp, letterSpacing = 0.65.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
-    }
-}
-
-@Composable
-private fun SettingsToolRow(icon: ImageVector, title: String, description: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(33.dp).padding(7.dp), tint = MaterialTheme.colorScheme.primary)
-        }
-        Spacer(Modifier.width(11.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Text(description, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleLarge)
-    }
-}
-
-@Composable
-internal fun PermissionRow(
-    title: String,
-    description: String,
-    granted: Boolean,
-    actionLabel: String,
-    onAction: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.background,
-    ) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
-            Modifier.padding(start = 13.dp, top = 11.dp, bottom = 11.dp, end = 9.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(modifier = Modifier.size(10.dp), shape = CircleShape, color = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) {}
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                title.uppercase(),
+                fontSize = 11.sp,
+                letterSpacing = 0.8.sp,
+                color = Color(0xFF59635F),
+                fontWeight = FontWeight.Bold,
+            )
+            action?.invoke()
+        }
+        if (subtitle.isNotBlank()) {
+            Text(
+                subtitle,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    }
+}
+
+@Composable
+internal fun SettingsCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = Color.White,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        shadowElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+internal fun SettingsRow(
+    iconRes: Int,
+    title: String,
+    subtitle: String? = null,
+    onClick: (() -> Unit)? = null,
+    endContent: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(33.dp)
+                .background(Color(0xFFDCFCE7), RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(19.dp),
+                tint = Color(0xFF006A47),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF1A202C),
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    subtitle,
+                    fontSize = 10.5.sp,
+                    color = Color(0xFF64748B),
+                    lineHeight = 15.sp,
+                )
             }
-            Button(
-                onClick = onAction,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-            ) { Text(actionLabel) }
+        }
+        if (endContent != null) {
+            endContent()
+        } else if (onClick != null) {
+            Icon(
+                painter = painterResource(com.example.moneycheck.R.drawable.chevron_right_lucide),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = Color(0xFF94A3B8),
+            )
         }
     }
 }
 
 @Composable
-internal fun SettingToggleRow(title: String, description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+internal fun SettingsPermissionRow(
+    iconRes: Int,
+    title: String,
+    granted: Boolean,
+    onAction: () -> Unit,
+) {
+    SettingsRow(
+        iconRes = iconRes,
+        title = title,
+        subtitle = if (granted) "Đã cấp quyền" else "Chưa cấp quyền",
+        onClick = onAction,
+        endContent = {
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = if (granted) Color(0xFFDCFCE7) else Color(0xFFFEE2E2),
+                modifier = Modifier.clickable(onClick = onAction),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        if (granted) "Đã cấp" else "Cấp quyền",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (granted) Color(0xFF166534) else Color(0xFFDC2626),
+                    )
+                    Icon(
+                        painter = painterResource(com.example.moneycheck.R.drawable.chevron_right_lucide),
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = if (granted) Color(0xFF166534) else Color(0xFFDC2626),
+                    )
+                }
+            }
+        }
+    )
+}
+
+@Composable
+internal fun SettingsToggleRow(
+    iconRes: Int,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(33.dp)
+                .background(Color(0xFFDCFCE7), RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(19.dp),
+                tint = Color(0xFF006A47),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF1A202C),
+            )
+            Text(
+                subtitle,
+                fontSize = 10.5.sp,
+                color = Color(0xFF64748B),
+                lineHeight = 15.sp,
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
+@Composable
+internal fun AppRuleCard(
+    app: InstalledApp,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    titleInput: String,
+    onTitleInputChanged: (String) -> Unit,
+    onDeleteRule: () -> Unit,
+) {
+    val titleCount = titleInput.lineSequence().count { it.isNotBlank() }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.background,
+        color = Color.White,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        shadowElevation = 1.dp,
     ) {
-        Row(Modifier.padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggleExpanded),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppAvatar(app.label, app.packageName)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(app.label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A202C))
+                    Text(
+                        app.packageName,
+                        fontSize = 10.sp,
+                        color = Color(0xFF64748B),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Surface(
+                    color = Color(0xFFF1F5F9),
+                    shape = RoundedCornerShape(4.dp),
+                ) {
+                    Text(
+                        if (titleCount == 0) "Mọi tiêu đề" else "$titleCount tiêu đề",
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF475569),
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (expanded) "⌄" else "›",
+                    fontSize = 16.sp,
+                    color = Color(0xFF94A3B8),
+                )
             }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            if (expanded) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Tiêu đề notification (mỗi dòng một tiêu đề)",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF475569),
+                )
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = titleInput,
+                    onValueChange = onTitleInputChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Để trống để nhận mọi tiêu đề", fontSize = 11.sp) },
+                    minLines = 2,
+                    maxLines = 4,
+                    shape = RoundedCornerShape(8.dp),
+                )
+                Spacer(Modifier.height(6.dp))
+                TextButton(
+                    onClick = onDeleteRule,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Icon(
+                        painterResource(com.example.moneycheck.R.drawable.trash_2_lucide),
+                        contentDescription = null,
+                        tint = Color(0xFFDC2626),
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Bỏ quy tắc ${app.label}", color = Color(0xFFDC2626), fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SelectAppSheet(
+    installedApps: List<InstalledApp>,
+    selectedPackages: Set<String>,
+    onDismiss: () -> Unit,
+    onSelectApp: (InstalledApp) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(query, installedApps) {
+        val q = query.trim().lowercase()
+        if (q.isBlank()) installedApps
+        else installedApps.filter { (it.label + it.packageName).lowercase().contains(q) }
+    }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+        containerColor = Color.White,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 6.dp)
+                    .width(34.dp)
+                    .height(4.dp)
+                    .background(Color(0xFFCBD5E1), RoundedCornerShape(3.dp))
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .imePadding(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Chọn ứng dụng", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Surface(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onDismiss),
+                    shape = CircleShape,
+                    color = Color(0xFFF1F5F9),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Close, contentDescription = "Đóng", modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                placeholder = { Text("Tìm tên hoặc package", fontSize = 12.sp) },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                singleLine = true,
+                shape = RoundedCornerShape(8.dp),
+            )
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 380.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(filtered, key = InstalledApp::packageName) { app ->
+                    val isSelected = app.packageName in selectedPackages
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                onSelectApp(app)
+                                onDismiss()
+                            }
+                            .padding(vertical = 8.dp, horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AppAvatar(app.label, app.packageName)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(app.label, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(app.packageName, fontSize = 10.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (isSelected) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF006A47), modifier = Modifier.size(18.dp))
+                        } else {
+                            Icon(painterResource(com.example.moneycheck.R.drawable.plus_lucide), contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
