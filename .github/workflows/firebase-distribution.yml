@@ -1,0 +1,36 @@
+name: Build & Distribute to Firebase
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-distribute:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK to Firebase App Distribution
+        uses: wzieba/Firebase-App-Distribution@v3
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          token: ${{ secrets.FIREBASE_TOKEN }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
+          groups: testers
+          file: app/build/outputs/apk/debug/app-debug.apk
