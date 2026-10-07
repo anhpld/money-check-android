@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
@@ -71,6 +72,7 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
@@ -119,6 +121,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -309,21 +312,65 @@ internal fun TransactionScreen(
         }
         item { HorizontalDivider(color = MaterialTheme.colorScheme.outline) }
         item {
+            val hasFilter = filterStartEpochDay != null && filterEndEpochDay != null
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Giao dịch gần đây", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
                     Text(filteredTransactions.size.toString(), Modifier.padding(horizontal = 7.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { showDateFilter = true }, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)) {
-                    Icon(Icons.Outlined.DateRange, contentDescription = null, modifier = Modifier.size(14.dp))
+                OutlinedButton(
+                    onClick = { showDateFilter = true },
+                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    border = if (hasFilter) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (hasFilter) Color(0xFFDCFCE7) else MaterialTheme.colorScheme.surface,
+                        contentColor = if (hasFilter) Color(0xFF006A47) else MaterialTheme.colorScheme.onSurface,
+                    ),
+                    modifier = Modifier.height(29.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.DateRange,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp),
+                        tint = if (hasFilter) Color(0xFF006A47) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Spacer(Modifier.width(5.dp))
-                    Text(if (filterStartEpochDay == null) "Lọc ngày" else "Đã lọc", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        if (hasFilter) "Đã lọc" else "Lọc ngày",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (hasFilter) Color(0xFF006A47) else MaterialTheme.colorScheme.onSurface,
+                    )
                 }
             }
-            if (filterStartEpochDay != null && filterEndEpochDay != null) {
-                TextButton(onClick = { filterStartEpochDay = null; filterEndEpochDay = null }) {
-                    Text("${formatEpochDay(requireNotNull(filterStartEpochDay))} – ${formatEpochDay(requireNotNull(filterEndEpochDay))}  ×", style = MaterialTheme.typography.labelSmall)
+            if (hasFilter) {
+                Row(
+                    modifier = Modifier.padding(top = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Text(
+                        "${formatEpochDay(requireNotNull(filterStartEpochDay))} — ${formatEpochDay(requireNotNull(filterEndEpochDay))}",
+                        fontSize = 10.sp,
+                        color = Color(0xFF006A47),
+                        fontWeight = FontWeight.Medium,
+                    )
+                    IconButton(
+                        onClick = {
+                            filterStartEpochDay = null
+                            filterEndEpochDay = null
+                        },
+                        modifier = Modifier.size(23.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "Xóa lọc ngày",
+                            modifier = Modifier.size(13.dp),
+                            tint = Color(0xFF006A47),
+                        )
+                    }
                 }
             }
         }
@@ -371,7 +418,7 @@ internal fun TransactionScreen(
     }
 
     if (showDateFilter) {
-        TransactionDateRangeDialog(
+        TransactionDateFilterSheet(
             initialStartEpochDay = filterStartEpochDay,
             initialEndEpochDay = filterEndEpochDay,
             onDismiss = { showDateFilter = false },

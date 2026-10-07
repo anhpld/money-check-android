@@ -244,33 +244,55 @@ fun MoneyCheckApp(
                 ) {
                     MainTab.entries.forEach { tab ->
                         val selected = selectedTab == tab
-                        val itemColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        val itemColor = if (selected) Color(0xFF006A47) else MaterialTheme.colorScheme.onSurfaceVariant
+                        val fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
                         Column(
-                            modifier = Modifier.weight(1f).height(52.dp).clickable { selectedTab = tab },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (selected) Color(0xFFDCFCE7) else Color.Transparent,
+                                    RoundedCornerShape(10.dp),
+                                )
+                                .clickable { selectedTab = tab },
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalArrangement = Arrangement.Center,
                         ) {
-                            Box(
-                                modifier = Modifier.width(47.dp).height(31.dp)
-                                    .background(
-                                        if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                        androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(painter = painterResource(tab.iconRes), contentDescription = null, modifier = Modifier.size(21.dp), tint = itemColor)
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    painter = painterResource(tab.iconRes),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(21.dp),
+                                    tint = itemColor,
+                                )
                                 if (tab == MainTab.PENDING && pendingConfirmations.isNotEmpty()) {
                                     Box(
-                                        modifier = Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-5).dp)
-                                            .size(17.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 10.dp, y = (-7).dp)
+                                            .size(17.dp)
+                                            .clip(CircleShape)
                                             .background(Color(0xFFF9F4E6)),
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        Text(pendingConfirmations.size.toString(), fontSize = 8.sp, color = Color(0xFF9E7525), lineHeight = 10.sp)
+                                        Text(
+                                            pendingConfirmations.size.toString(),
+                                            fontSize = 8.sp,
+                                            color = Color(0xFF9E7525),
+                                            lineHeight = 10.sp,
+                                        )
                                     }
                                 }
                             }
-                            Text(tab.label, color = itemColor, fontSize = 9.sp, fontWeight = FontWeight.Medium, lineHeight = 11.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                tab.label,
+                                color = itemColor,
+                                fontSize = 9.sp,
+                                fontWeight = fontWeight,
+                                lineHeight = 11.sp,
+                            )
                         }
                     }
                 }

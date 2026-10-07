@@ -310,11 +310,38 @@ internal fun TransactionDayHeader(date: LocalDate, transactions: List<Transactio
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp),
+            .padding(top = 18.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(formatTransactionDayTitle(date), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-        Text(formatEpochDay(date.toEpochDay()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFF006A47), CircleShape),
+                )
+                Text(
+                    formatTransactionDayTitle(date),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        Text(
+            formatEpochDay(date.toEpochDay()),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -415,7 +442,7 @@ internal fun TransactionCard(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(transaction.recipient.ifBlank { "Chưa có người nhận" }, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Người nhận: " + transaction.recipient.ifBlank { "chưa có" }, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.width(8.dp))
                 Text((if (income) "+" else "−") + formatMoney(transaction.amount), color = accent, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             }
@@ -569,72 +596,226 @@ internal fun CompactListAction(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TransactionDateRangeDialog(
+internal fun TransactionDateFilterSheet(
     initialStartEpochDay: Long?,
     initialEndEpochDay: Long?,
     onDismiss: () -> Unit,
-    onApply: (Long, Long) -> Unit,
+    onApply: (Long?, Long?) -> Unit,
 ) {
-    val state = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = initialStartEpochDay?.times(MILLIS_PER_DAY),
-        initialSelectedEndDateMillis = initialEndEpochDay?.times(MILLIS_PER_DAY),
-    )
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val today = remember { LocalDate.now() }
+    var startDay by remember { mutableStateOf(initialStartEpochDay?.let { LocalDate.ofEpochDay(it) } ?: today.withDayOfMonth(1)) }
+    var endDay by remember { mutableStateOf(initialEndEpochDay?.let { LocalDate.ofEpochDay(it) } ?: today) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    DatePickerDialog(
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val start = state.selectedStartDateMillis?.floorDiv(MILLIS_PER_DAY)
-                    val end = state.selectedEndDateMillis?.floorDiv(MILLIS_PER_DAY)
-                    when {
-                        start == null || end == null -> errorMessage = "Hãy chọn đủ ngày bắt đầu và kết thúc"
-                        LocalDate.ofEpochDay(end).isAfter(LocalDate.ofEpochDay(start).plusMonths(3)) -> {
-                            errorMessage = "Khoảng lọc không được dài quá 3 tháng"
-                        }
-                        else -> onApply(start, end)
-                    }
-                },
-            ) { Text("Áp dụng") }
-        },
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.background,
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
     ) {
-        Column(Modifier.fillMaxWidth().heightIn(max = 610.dp)) {
-            DateRangePicker(
-                state = state,
-                modifier = Modifier.weight(1f),
-                title = {
-                    Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp)) {
-                        Text("Chọn khoảng ngày", style = MaterialTheme.typography.titleLarge)
-                        Text("Khoảng tối đa 3 tháng", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                headline = {
-                    val start = state.selectedStartDateMillis?.floorDiv(MILLIS_PER_DAY)
-                    val end = state.selectedEndDateMillis?.floorDiv(MILLIS_PER_DAY)
-                    Text(
-                        when {
-                            start != null && end != null -> "${formatEpochDay(start)} – ${formatEpochDay(end)}"
-                            start != null -> "${formatEpochDay(start)} – Chọn ngày kết thúc"
-                            else -> "Ngày bắt đầu – Ngày kết thúc"
-                        },
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                showModeToggle = false,
-            )
-            errorMessage?.let {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // Header
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    it,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                    "Lọc theo ngày",
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Chọn khoảng thời gian tối đa 3 tháng.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
+            // Presets
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                val presets = listOf(
+                    "Tháng này" to (today.withDayOfMonth(1) to today),
+                    "Tháng trước" to (today.minusMonths(1).withDayOfMonth(1) to today.minusMonths(1).withDayOfMonth(today.minusMonths(1).lengthOfMonth())),
+                    "3 tháng gần đây" to (today.minusMonths(3) to today),
+                )
+                presets.forEach { (label, range) ->
+                    OutlinedButton(
+                        onClick = {
+                            startDay = range.first
+                            endDay = range.second
+                            errorMessage = null
+                        },
+                        modifier = Modifier.height(34.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    ) {
+                        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+
+            // Field: Từ ngày
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Từ ngày", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                Surface(
+                    onClick = { showStartDatePicker = true },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            formatEpochDay(startDay.toEpochDay()),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Icon(
+                            Icons.Outlined.DateRange,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // Field: Đến ngày
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Đến ngày", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                Surface(
+                    onClick = { showEndDatePicker = true },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            formatEpochDay(endDay.toEpochDay()),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Icon(
+                            Icons.Outlined.DateRange,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // Error message
+            errorMessage?.let { error ->
+                Text(
+                    error,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            // Modal Actions: [Tất cả thời gian] [Áp dụng]
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        onApply(null, null)
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(6.dp),
+                ) {
+                    Text("Tất cả thời gian", fontSize = 12.sp)
+                }
+                Button(
+                    onClick = {
+                        if (endDay.isBefore(startDay)) {
+                            errorMessage = "Ngày kết thúc phải sau ngày bắt đầu."
+                            return@Button
+                        }
+                        if (endDay.isAfter(startDay.plusMonths(3))) {
+                            errorMessage = "Khoảng lọc không được vượt quá 3 tháng."
+                            return@Button
+                        }
+                        onApply(startDay.toEpochDay(), endDay.toEpochDay())
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1.5f).height(44.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006A47)),
+                ) {
+                    Text("Áp dụng", fontSize = 12.sp, color = Color.White)
+                }
+            }
+        }
+    }
+
+    if (showStartDatePicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = startDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { millis ->
+                        startDay = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        errorMessage = null
+                    }
+                    showStartDatePicker = false
+                }) { Text("Chọn") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) { Text("Hủy") }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+
+    if (showEndDatePicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = endDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { millis ->
+                        endDay = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        errorMessage = null
+                    }
+                    showEndDatePicker = false
+                }) { Text("Chọn") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) { Text("Hủy") }
+            }
+        ) {
+            DatePicker(state = pickerState)
         }
     }
 }
