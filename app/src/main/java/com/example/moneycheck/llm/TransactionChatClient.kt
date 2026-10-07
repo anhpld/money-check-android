@@ -39,71 +39,77 @@ internal class TransactionChatClient {
         }
 
         val tools = createTools()
+        val maxTurns = 6
+        var currentTurn = 0
 
-        // Turn 1: Cho phép LLM gọi tool SQL (stream = false)
-        val initialRequest = JSONObject().apply {
-            put("model", model)
-            put("stream", false)
-            put("messages", messages)
-            put("tools", tools)
-        }
+        while (currentTurn < maxTurns) {
+            currentTurn++
 
-        val initialResponseJson = postJson(apiBaseUrl, authBearerToken, initialRequest)
-        val firstChoice = initialResponseJson
-            .optJSONArray("choices")
-            ?.optJSONObject(0)
-            ?: throw IOException("API không trả về lựa chọn trả lời hợp lệ")
-
-        val assistantMessage = firstChoice.optJSONObject("message")
-            ?: throw IOException("API không trả về nội dung tin nhắn")
-
-        val toolCalls = assistantMessage.optJSONArray("tool_calls")
-        if (toolCalls == null || toolCalls.length() == 0) {
-            val directAnswer = extractText(assistantMessage.opt("content"))
-                ?: throw IOException("API không trả về nội dung trả lời")
-            onDelta(directAnswer)
-            return directAnswer
-        }
-
-        messages.put(assistantMessage)
-
-        for (i in 0 until toolCalls.length()) {
-            val call = toolCalls.getJSONObject(i)
-            val callId = call.getString("id")
-            val func = call.getJSONObject("function")
-            val funcName = func.getString("name")
-            val argsStr = func.optString("arguments")
-
-            val resultJson = if (funcName == "execute_read_only_sql") {
-                val args = runCatching { JSONObject(argsStr) }.getOrNull()
-                val sql = args?.optString("query")?.ifBlank { null }
-                    ?: args?.optString("sql")?.ifBlank { null }
-                if (!sql.isNullOrBlank()) {
-                    executeQuery(sql)
-                } else {
-                    JSONObject().put("error", "Tham số 'query' không được để trống").toString()
+            val isFinalTurn = currentTurn == maxTurns
+            val requestPayload = JSONObject().apply {
+                put("model", model)
+                put("stream", false)
+                put("messages", messages)
+                if (!isFinalTurn) {
+                    put("tools", tools)
                 }
-            } else {
-                JSONObject().put("error", "Không hỗ trợ công cụ: $funcName").toString()
             }
 
-            messages.put(
-                JSONObject().apply {
-                    put("role", "tool")
-                    put("tool_call_id", callId)
-                    put("content", resultJson)
-                },
-            )
+            val responseJson = postJson(apiBaseUrl, authBearerToken, requestPayload)
+            val firstChoice = responseJson
+                .optJSONArray("choices")
+                ?.optJSONObject(0)
+                ?: throw IOException("API không trả về lựa chọn trả lời hợp lệ")
+
+            val assistantMessage = firstChoice.optJSONObject("message")
+                ?: throw IOException("API không trả về nội dung tin nhắn")
+
+            val toolCalls = assistantMessage.optJSONArray("tool_calls")
+            if (toolCalls == null || toolCalls.length() == 0 || isFinalTurn) {
+                val directAnswer = extractText(assistantMessage.opt("content"))
+                    ?: extractText(assistantMessage.opt("reasoning_content"))
+                    ?: extractText(assistantMessage.opt("thought"))
+                    ?: throw IOException("API không trả về nội dung trả lời")
+                onDelta(directAnswer)
+                return directAnswer
+            }
+
+            if (!assistantMessage.has("content") || assistantMessage.isNull("content")) {
+                assistantMessage.put("content", JSONObject.NULL)
+            }
+            messages.put(assistantMessage)
+
+            for (i in 0 until toolCalls.length()) {
+                val call = toolCalls.getJSONObject(i)
+                val callId = call.optString("id", "call_${System.currentTimeMillis()}_$i")
+                val func = call.getJSONObject("function")
+                val funcName = func.getString("name")
+                val argsStr = func.optString("arguments")
+
+                val resultJson = if (funcName == "execute_read_only_sql") {
+                    val args = runCatching { JSONObject(argsStr) }.getOrNull()
+                    val sql = args?.optString("query")?.ifBlank { null }
+                        ?: args?.optString("sql")?.ifBlank { null }
+                    if (!sql.isNullOrBlank()) {
+                        executeQuery(sql)
+                    } else {
+                        JSONObject().put("error", "Tham số 'query' không được để trống").toString()
+                    }
+                } else {
+                    JSONObject().put("error", "Không hỗ trợ công cụ: $funcName").toString()
+                }
+
+                messages.put(
+                    JSONObject().apply {
+                        put("role", "tool")
+                        put("tool_call_id", callId)
+                        put("content", resultJson)
+                    },
+                )
+            }
         }
 
-        // Turn 2: Gửi kết quả tool về cho LLM và stream câu trả lời cuối cùng
-        val streamRequest = JSONObject().apply {
-            put("model", model)
-            put("stream", true)
-            put("messages", messages)
-        }
-
-        return streamResponse(apiBaseUrl, authBearerToken, streamRequest, onDelta)
+        throw IOException("Đã vượt quá số lượt truy vấn dữ liệu cho phép")
     }
 
     private fun systemPrompt(totalCount: Int): String {
@@ -132,16 +138,19 @@ internal class TransactionChatClient {
             - transactionTime: INTEGER (Timestamp epoch mili-giây)
 
             HƯỚNG DẪN TRUY VẤN SQLITE:
+            - LUÔN truy vấn trực tiếp view `v_transactions` (không cần kiểm tra sqlite_master).
             - Chi tiêu / Tiền ra: `direction = 'expense'`
             - Thu nhập / Tiền vào: `direction = 'income'`
             - Hôm nay: `transaction_date = '$todayStr'`
             - Tháng này: `transaction_date LIKE '$currentMonthStr%'`
             - Tính tổng tiền: Dùng `SUM(amount)`
             - Đếm số giao dịch: Dùng `COUNT(*)`
+            - Phân tích dòng tiền (Cash flow): Truy vấn tổng thu, tổng chi `GROUP BY direction`, hoặc theo tháng `strftime('%Y-%m', transaction_date)`.
             - Thói quen (ví dụ "hay ăn gì", "hay mua ở đâu"): Hãy gom nhóm `GROUP BY recipient, purpose`, đếm `COUNT(*)` và sắp xếp `ORDER BY COUNT(*) DESC, SUM(amount) DESC LIMIT 20`.
 
             QUY TẮC PHẢN HỒI:
-            - Trả lời bằng tiếng Việt thân thiện, rõ ràng, ngắn gọn và có cấu trúc (gạch đầu dòng, định dạng tiền tệ như 50.000 đ).
+            - Trả lời bằng tiếng Việt thân thiện, rõ ràng, có cấu trúc (gạch đầu dòng, định dạng tiền tệ như 50.000 đ, emoji trực quan).
+            - Sau khi nhận dữ liệu từ các lệnh SQL, hãy tổng hợp câu trả lời chi tiết và đầy đủ cho người dùng.
             - Nếu cơ sở dữ liệu không có giao dịch phù hợp, hãy thông báo rõ ràng cho người dùng.
             - Không bịa đặt số liệu không có trong kết quả truy vấn.
         """.trimIndent()
@@ -324,12 +333,17 @@ internal class TransactionChatClient {
             val firstChoice = choices?.opt(0) as? JSONObject
             val message = firstChoice?.opt("message")
             val messageContent = when (message) {
-                is JSONObject -> message.opt("content")
+                is JSONObject -> message.opt("content") ?: message.opt("reasoning_content") ?: message.opt("thought")
                 else -> message
             }
             extractText(messageContent)
                 ?: extractText((firstChoice?.opt("delta") as? JSONObject)?.opt("content"))
+                ?: extractText((firstChoice?.opt("delta") as? JSONObject)?.opt("reasoning_content"))
+                ?: extractText((firstChoice?.opt("delta") as? JSONObject)?.opt("thought"))
                 ?: extractText(firstChoice?.opt("text"))
+                ?: extractText(value.opt("content"))
+                ?: extractText(value.opt("reasoning_content"))
+                ?: extractText(value.opt("thought"))
                 ?: extractText(value.opt("output_text"))
                 ?: extractText(value.opt("content"))
                 ?: extractText(value.opt("answer"))
