@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "736407496938",
+    "project_id": "money-check-2f79f",
+    "storage_bucket": "money-check-2f79f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:736407496938:android:c6a9d5c149d794dc37cf93",
+        "android_client_info": {
+          "package_name": "com.example.moneycheck"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATnZqLhVWNrkmEWHkACY47TYfH1h0yahs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
