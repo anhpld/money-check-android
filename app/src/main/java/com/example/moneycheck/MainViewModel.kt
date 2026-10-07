@@ -414,19 +414,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val apiKey = appSettings.apiKey().orEmpty()
-        if (apiKey.isBlank()) {
-            _chatState.value = _chatState.value.copy(errorMessage = "Hãy cấu hình API URL và key trong Cài đặt")
-            return
-        }
-
-        val currentModel = _chatState.value.selectedModel.ifBlank { appSettings.model() }
         val userMessage = ChatMessage(
             id = System.nanoTime(),
             role = "user",
             content = question,
         )
         val conversation = _chatState.value.messages + userMessage
+
+        val apiKey = appSettings.apiKey().orEmpty()
+        if (apiKey.isBlank()) {
+            _chatState.value = _chatState.value.copy(
+                messages = conversation,
+                errorMessage = "Hãy cấu hình API URL và key trong Cài đặt",
+            )
+            return
+        }
+
+        val currentModel = _chatState.value.selectedModel.ifBlank { appSettings.model() }
         _chatState.value = _chatState.value.copy(messages = conversation, isSending = true, errorMessage = null)
 
         viewModelScope.launch(Dispatchers.IO) {

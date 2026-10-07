@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -269,58 +271,125 @@ internal fun ChatScreen(
             if (state.messages.isEmpty()) {
                 item {
                     if (transactionCount == 0) {
-                        EmptyStateCard(
-                            symbol = "✦",
-                            title = "Chưa có dữ liệu để trò chuyện",
-                            description = "Thêm hoặc xác nhận một giao dịch trước khi hỏi trợ lý.",
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 65.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(15.dp),
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(67.dp),
+                                shape = CircleShape,
+                                color = Color(0xFFDCFCE7),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        painter = painterResource(com.example.moneycheck.R.drawable.message_square_lucide),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(28.dp),
+                                        tint = Color(0xFF166534),
+                                    )
+                                }
+                            }
+                            Text(
+                                "Chưa có dữ liệu để trò chuyện",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                "Thêm hoặc xác nhận một giao dịch trước khi hỏi trợ lý.",
+                                fontSize = 12.sp,
+                                lineHeight = 22.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.widthIn(max = 270.dp),
+                            )
+                        }
                     } else {
                         Column(
-                            Modifier.fillMaxWidth().padding(top = 18.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 18.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Image(
                                 painter = painterResource(com.example.moneycheck.R.drawable.assistant_spark),
                                 contentDescription = null,
                                 modifier = Modifier.size(108.dp),
                             )
-                            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
-                                Text("TRỢ LÝ TÀI CHÍNH", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Surface(
+                                color = Color(0xFFDCFCE7),
+                                shape = RoundedCornerShape(4.dp),
+                                modifier = Modifier.padding(top = 18.dp),
+                            ) {
+                                Text(
+                                    "TRỢ LÝ TÀI CHÍNH",
+                                    Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    fontSize = 10.sp,
+                                    letterSpacing = 1.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF166534),
+                                )
                             }
-                            Text("Tiền của bạn,\nrõ ràng hơn.", fontSize = 27.sp, lineHeight = 39.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-                            Text("Hôm nay bạn muốn tìm hiểu điều gì?", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.size(18.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Tiền của bạn,\nrõ ràng hơn.",
+                                fontSize = 27.sp,
+                                lineHeight = 39.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(top = 16.dp),
+                            )
+                            Text(
+                                "Hôm nay bạn muốn tìm hiểu điều gì?",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 12.dp),
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 30.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
                                 listOf(
                                     "Dòng tiền của tôi thế nào?",
                                     "Tôi chi nhiều nhất cho khoản nào?",
                                     "Tổng chi tiêu đã lưu là bao nhiêu?",
                                 ).forEach { suggestion ->
-                                    OutlinedButton(
+                                    Surface(
                                         onClick = { onSend(suggestion) },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(43.dp)
-                                            .shadow(2.dp, RoundedCornerShape(6.dp)),
+                                            .height(43.dp),
                                         shape = RoundedCornerShape(6.dp),
-                                        border = null,
-                                        colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface),
-                                        contentPadding = PaddingValues(horizontal = 13.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        shadowElevation = 1.dp,
                                     ) {
-                                        Text(
-                                            suggestion,
-                                            Modifier.weight(1f),
-                                            fontSize = 10.sp,
-                                            textAlign = TextAlign.Start,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                        Icon(
-                                            painter = painterResource(com.example.moneycheck.R.drawable.arrow_up_right_lucide),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(15.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 13.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Text(
+                                                suggestion,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Normal,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            Icon(
+                                                painter = painterResource(com.example.moneycheck.R.drawable.arrow_up_right_lucide),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(15.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -332,22 +401,45 @@ internal fun ChatScreen(
                 if (message.role == "user") {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                         Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                            color = Color(0xFFDCFCE7),
                             shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 8.dp, bottomEnd = 0.dp),
                             modifier = Modifier.fillMaxWidth(0.86f),
                         ) {
                             SelectionContainer {
-                                Text(message.content, Modifier.padding(horizontal = 15.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, lineHeight = 23.sp)
+                                Text(
+                                    message.content,
+                                    Modifier.padding(horizontal = 15.dp, vertical = 12.dp),
+                                    color = Color(0xFF166534),
+                                    fontSize = 12.sp,
+                                    lineHeight = 23.sp,
+                                )
                             }
                         }
                     }
                 } else {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Surface(Modifier.size(25.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
-                            Icon(painterResource(com.example.moneycheck.R.drawable.nav_sparkles), contentDescription = null, modifier = Modifier.padding(5.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .size(25.dp)
+                                .padding(top = 4.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    painter = painterResource(com.example.moneycheck.R.drawable.nav_sparkles),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                )
+                            }
                         }
-                        SelectionContainer {
-                            ChatMarkdown(message.content, Modifier.weight(1f))
+                        SelectionContainer(modifier = Modifier.weight(1f).padding(vertical = 2.dp)) {
+                            ChatMarkdown(message.content)
                         }
                     }
                 }
@@ -371,12 +463,12 @@ internal fun ChatScreen(
             state.errorMessage?.let { message ->
                 item {
                     Surface(
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
-                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFFEE2E2),
+                        shape = RoundedCornerShape(6.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -384,23 +476,28 @@ internal fun ChatScreen(
                                 painter = painterResource(com.example.moneycheck.R.drawable.alert_circle_lucide),
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.error,
+                                tint = Color(0xFFDC2626),
                             )
                             Text(
                                 message,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
+                                color = Color(0xFFDC2626),
                                 modifier = Modifier.weight(1f),
                                 fontSize = 11.sp,
+                                lineHeight = 16.sp,
                             )
                             val lastUserQuestion = state.messages.lastOrNull { it.role == "user" }?.content
                             if (!lastUserQuestion.isNullOrBlank()) {
-                                TextButton(
-                                    onClick = { onSend(lastUserQuestion) },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                ) {
-                                    Text("Thử lại", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-                                }
+                                Text(
+                                    "Thử lại",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFFDC2626),
+                                    textDecoration = TextDecoration.Underline,
+                                    modifier = Modifier
+                                        .clickable { onSend(lastUserQuestion) }
+                                        .padding(4.dp),
+                                )
                             }
                         }
                     }
@@ -408,11 +505,17 @@ internal fun ChatScreen(
             }
         }
 
-        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 24.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+        ) {
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 3.dp,
+                border = BorderStroke(1.dp, Color(0xFFCCD3CE)),
+                shadowElevation = 0.dp,
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(6.dp),
