@@ -58,7 +58,7 @@ jobs:
             export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/service-account.json"
             firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
               --app "$FIREBASE_APP_ID" \
-              --groups testers \
+              --testers "plda140997@gmail.com" \
               --release-notes "Cập nhật trợ lý AI với SQL tool calling và giao diện Lovable" || \
             firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
               --app "$FIREBASE_APP_ID" \
