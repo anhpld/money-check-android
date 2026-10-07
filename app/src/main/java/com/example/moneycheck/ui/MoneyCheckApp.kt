@@ -169,6 +169,7 @@ fun MoneyCheckApp(
     onRequestPostNotifications: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onExportDatabase: () -> Unit,
+    onImportDatabase: () -> Unit,
 ) {
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val inboxNotifications by viewModel.inboxNotifications.collectAsStateWithLifecycle()
@@ -354,6 +355,7 @@ fun MoneyCheckApp(
                 onOpenTool = { settingsDestination = it },
                 onClearApiKey = viewModel::clearApiKey,
                 onExportDatabase = onExportDatabase,
+                onImportDatabase = onImportDatabase,
                     )
                 },
                 inbox = {

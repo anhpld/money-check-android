@@ -54,6 +54,24 @@ class MainActivity : ComponentActivity() {
             ).show()
         }
     }
+    private val databaseImportLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { sourceUri ->
+        if (sourceUri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val result = runCatching {
+                contentResolver.openInputStream(sourceUri).use { input ->
+                    checkNotNull(input) { "Không thể mở file đã chọn" }
+                    MoneyCheckRepository.get(this@MainActivity).importDatabase(input)
+                }
+            }
+            Toast.makeText(
+                this@MainActivity,
+                if (result.isSuccess) "Đã nhập database thành công" else "Không thể nhập database: ${result.exceptionOrNull()?.message.orEmpty()}",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,6 +98,9 @@ class MainActivity : ComponentActivity() {
                     onRequestOverlayPermission = ::openOverlayPermissionSettings,
                     onExportDatabase = {
                         databaseExportLauncher.launch("moneycheck-${LocalDate.now()}.db")
+                    },
+                    onImportDatabase = {
+                        databaseImportLauncher.launch(arrayOf("*/*"))
                     },
                 )
             }

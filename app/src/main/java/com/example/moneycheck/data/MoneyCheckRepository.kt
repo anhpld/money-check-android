@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
+import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
 
@@ -64,6 +66,43 @@ class MoneyCheckRepository private constructor(context: Context) {
             source.copyTo(destination)
         }
         destination.flush()
+    }
+
+    suspend fun importDatabase(source: InputStream) = io {
+        val dbFile = appContext.getDatabasePath(DATABASE_NAME)
+        val tempFile = File(appContext.cacheDir, "temp_import_${System.currentTimeMillis()}.db")
+        try {
+            tempFile.outputStream().use { out ->
+                source.copyTo(out)
+                out.flush()
+            }
+            if (tempFile.length() < 100) {
+                error("File database quá nhỏ hoặc không hợp lệ")
+            }
+            val header = ByteArray(16)
+            tempFile.inputStream().use { it.read(header) }
+            val magic = String(header, Charsets.US_ASCII)
+            if (!magic.startsWith("SQLite format 3")) {
+                error("File không phải định dạng SQLite database hợp lệ")
+            }
+
+            helper.close()
+
+            val walFile = File(dbFile.parentFile, "$DATABASE_NAME-wal")
+            val shmFile = File(dbFile.parentFile, "$DATABASE_NAME-shm")
+            val journalFile = File(dbFile.parentFile, "$DATABASE_NAME-journal")
+            if (walFile.exists()) walFile.delete()
+            if (shmFile.exists()) shmFile.delete()
+            if (journalFile.exists()) journalFile.delete()
+
+            tempFile.copyTo(dbFile, overwrite = true)
+
+            backfillMissingTransactionTraces()
+            purgeExpiredInbox()
+            refreshAll()
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
+        }
     }
 
     suspend fun executeReadOnlyQuery(sql: String): String = io {

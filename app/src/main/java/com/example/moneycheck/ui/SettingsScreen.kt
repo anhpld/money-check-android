@@ -168,6 +168,7 @@ internal fun SettingsScreen(
     onOpenTool: (SettingsDestination) -> Unit,
     onClearApiKey: () -> Unit,
     onExportDatabase: () -> Unit,
+    onImportDatabase: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var apiBaseUrl by rememberSaveable { mutableStateOf(settings.apiBaseUrl) }
@@ -187,6 +188,7 @@ internal fun SettingsScreen(
     var aiSettingsExpanded by rememberSaveable { mutableStateOf(false) }
     var expandedRulePackage by rememberSaveable { mutableStateOf<String?>(null) }
     var promptEditorTarget by remember { mutableStateOf<PromptEditorTarget?>(null) }
+    var showImportConfirmDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(openAiConnection.models) {
         if (openAiConnection.models.isNotEmpty() && model !in openAiConnection.models) model = openAiConnection.models.first()
@@ -514,6 +516,12 @@ internal fun SettingsScreen(
                 ) {
                     Text("Xuất file database (.db)")
                 }
+                OutlinedButton(
+                    onClick = { showImportConfirmDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Nhập file database (.db)")
+                }
             }
         }
 
@@ -527,6 +535,35 @@ internal fun SettingsScreen(
                 prompt = updatedPrompt
                 saved = false
                 promptEditorTarget = null
+            },
+        )
+    }
+
+    if (showImportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirmDialog = false },
+            title = { Text("Nhập database sao lưu?") },
+            text = {
+                Text(
+                    "Thao tác này sẽ ghi đè toàn bộ dữ liệu giao dịch và thông báo hiện tại bằng dữ liệu từ file sao lưu đã chọn. Bạn có chắc chắn muốn tiếp tục?",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showImportConfirmDialog = false
+                        onImportDatabase()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text("Tiếp tục chọn file")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showImportConfirmDialog = false }) {
+                    Text("Hủy")
+                }
             },
         )
     }
