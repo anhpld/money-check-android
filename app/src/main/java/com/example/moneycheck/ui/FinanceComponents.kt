@@ -70,6 +70,7 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
@@ -185,45 +186,160 @@ internal fun ManualAddMethodDialog(
     onManualInput: () -> Unit,
     onPickImage: () -> Unit,
 ) {
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.background,
-        title = { Text("Thêm giao dịch") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onManualInput),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.medium,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+            shadowElevation = 16.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Nhập thủ công", style = MaterialTheme.typography.titleMedium)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "Nhập khoản thu hoặc chi tiền mặt; ứng dụng và người nhận là tùy chọn.",
-                            style = MaterialTheme.typography.bodySmall,
+                            "Thêm giao dịch",
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "Chọn cách ghi nhận khoản tiền của bạn.",
+                            fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    Surface(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onDismiss),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Đóng",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
                 }
+
                 Surface(
-                    modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onPickImage),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onManualInput),
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
                 ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Đọc từ ảnh", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Chọn ảnh chụp màn hình hoặc biên lai để AI tự động trích xuất thông tin giao dịch.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(13.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(39.dp)
+                                .background(Color(0xFFDCFCE7), RoundedCornerShape(6.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painterResource(com.example.moneycheck.R.drawable.pen_line_lucide),
+                                contentDescription = null,
+                                tint = Color(0xFF166534),
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "Nhập thủ công",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                "Ghi lại một khoản thu hoặc chi",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            painterResource(com.example.moneycheck.R.drawable.chevron_right_lucide),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onPickImage),
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(13.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(39.dp)
+                                .background(Color(0xFFDCFCE7), RoundedCornerShape(6.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painterResource(com.example.moneycheck.R.drawable.scan_text_lucide),
+                                contentDescription = null,
+                                tint = Color(0xFF166534),
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "Quét ảnh biên lai",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                "AI trích xuất tự động từ ảnh chụp",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            painterResource(com.example.moneycheck.R.drawable.chevron_right_lucide),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Đóng") } },
-    )
+        }
+    }
 }
 
 @Composable
@@ -1225,26 +1341,34 @@ internal fun DirectionSegment(
 ) {
     val selected = value == selectedValue
     val income = value == "income"
-    val accent = if (income) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    val accentBg = if (income) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+    val accentText = if (income) Color(0xFF166534) else Color(0xFFDC2626)
+    val iconRes = if (income) com.example.moneycheck.R.drawable.arrow_down_left_lucide else com.example.moneycheck.R.drawable.arrow_up_right_lucide
     Surface(
-        modifier = modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) accent else Color.Transparent,
+        modifier = modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(6.dp),
+        color = if (selected) accentBg else Color.Transparent,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (selected) {
-                Text("✓", color = Color.White, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(6.dp))
-            }
+            Icon(
+                painterResource(iconRes),
+                contentDescription = null,
+                tint = if (selected) accentText else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(6.dp))
             Text(
                 label,
-                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) accentText else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontSize = 12.sp,
             )
         }
     }

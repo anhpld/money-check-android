@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
@@ -68,6 +69,8 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
@@ -112,9 +115,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -188,46 +193,124 @@ internal fun TransactionConfirmationDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.92f)
                 .imePadding(),
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .width(34.dp)
+                    .height(4.dp)
+                    .background(Color(0xFFCBD5E1), RoundedCornerShape(3.dp))
+                    .align(Alignment.CenterHorizontally),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Xác nhận giao dịch", style = MaterialTheme.typography.titleLarge)
-                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
-                    Text("TỰ ĐỘNG  ·  CHỜ BẠN KIỂM TRA", Modifier.padding(horizontal = 7.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                }
-                Text(formatMoney(parsedAmount ?: 0), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 Text(
-                    "${item.notification.appName} · ${formatDateTime(transactionTime)}",
-                    style = MaterialTheme.typography.bodySmall,
+                    "Xác nhận giao dịch",
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Surface(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onDismiss),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Đóng",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Surface(
+                    color = Color(0xFFDCFCE7),
+                    shape = RoundedCornerShape(4.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painterResource(com.example.moneycheck.R.drawable.shield_check_lucide),
+                            contentDescription = null,
+                            tint = Color(0xFF166534),
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            "Tự động",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF166534),
+                        )
+                    }
+                }
+                Text(
+                    "Chờ bạn kiểm tra",
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
                 )
             }
 
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    formatMoney(parsedAmount ?: 0),
+                    fontSize = 33.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "${item.notification.appName} · ${formatDateTime(transactionTime)}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text("Loại giao dịch", style = MaterialTheme.typography.titleSmall)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    color = Color(0xFFF1F5F9),
                     shape = RoundedCornerShape(7.dp),
                 ) {
                     Row(
                         modifier = Modifier.padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        DirectionSegment("income", direction, "Tiền vào", Modifier.weight(1f)) { direction = "income" }
                         DirectionSegment("expense", direction, "Tiền ra", Modifier.weight(1f)) { direction = "expense" }
+                        DirectionSegment("income", direction, "Tiền vào", Modifier.weight(1f)) { direction = "income" }
                     }
                 }
 
@@ -296,20 +379,26 @@ internal fun TransactionConfirmationDialog(
                     Text("Xem chi tiết đầu vào LLM")
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp).navigationBarsPadding(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 14.dp)
+                    .navigationBarsPadding(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Button(
+                OutlinedButton(
                     onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface,
                     ),
-                    contentPadding = PaddingValues(vertical = 14.dp),
-                ) { Text("Bỏ qua") }
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Text("Bỏ qua", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
                 Button(
                     onClick = {
                         onConfirm(
@@ -320,11 +409,26 @@ internal fun TransactionConfirmationDialog(
                             transactionTime,
                         )
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.65f).height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
                     enabled = parsedAmount != null && parsedAmount > 0 &&
                         direction in setOf("income", "expense") && recipient.isNotBlank() && purpose.isNotBlank(),
-                    contentPadding = PaddingValues(vertical = 14.dp),
-                ) { Text("Lưu giao dịch") }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF006A47),
+                        contentColor = Color.White,
+                        disabledContainerColor = Color(0xFF006A47).copy(alpha = 0.35f),
+                        disabledContentColor = Color.White.copy(alpha = 0.6f),
+                    ),
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Lưu giao dịch", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }

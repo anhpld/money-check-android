@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
@@ -69,6 +70,8 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
@@ -109,6 +112,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
@@ -217,25 +221,89 @@ internal fun TransactionEditorSheet(
         dragHandle = null,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f).imePadding(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding(),
         ) {
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .width(34.dp)
+                    .height(4.dp)
+                    .background(Color(0xFFCBD5E1), RoundedCornerShape(3.dp))
+                    .align(Alignment.CenterHorizontally),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     if (transaction == null) "Thêm giao dịch" else "Sửa giao dịch",
-                    style = MaterialTheme.typography.titleLarge,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Surface(color = if (transaction?.sourceType == TransactionSource.AUTOMATIC) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(4.dp)) {
-                    Text(
-                        if (transaction?.sourceType == TransactionSource.AUTOMATIC) "TỰ ĐỘNG" else "THỦ CÔNG",
-                        Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                Surface(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onDismiss),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Đóng",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
+            val isAutomatic = transaction?.sourceType == TransactionSource.AUTOMATIC
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Surface(
+                    color = if (isAutomatic) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
+                    shape = RoundedCornerShape(4.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painterResource(
+                                if (isAutomatic) com.example.moneycheck.R.drawable.shield_check_lucide
+                                else com.example.moneycheck.R.drawable.file_text_lucide
+                            ),
+                            contentDescription = null,
+                            tint = if (isAutomatic) Color(0xFF166534) else Color(0xFF475569),
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            if (isAutomatic) "Tự động" else "Thủ công",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isAutomatic) Color(0xFF166534) else Color(0xFF475569),
+                        )
+                    }
                 }
             }
             Column(
-                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text("Nguồn tiền", style = MaterialTheme.typography.titleSmall)
@@ -325,12 +393,12 @@ internal fun TransactionEditorSheet(
                 Text("Loại giao dịch", style = MaterialTheme.typography.titleSmall)
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    color = Color(0xFFF1F5F9),
                     shape = RoundedCornerShape(7.dp),
                 ) {
                     Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        DirectionSegment("income", direction, "Tiền vào", Modifier.weight(1f)) { direction = "income" }
                         DirectionSegment("expense", direction, "Tiền ra", Modifier.weight(1f)) { direction = "expense" }
+                        DirectionSegment("income", direction, "Tiền vào", Modifier.weight(1f)) { direction = "income" }
                     }
                 }
                 OutlinedTextField(
@@ -392,20 +460,26 @@ internal fun TransactionEditorSheet(
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp).navigationBarsPadding(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                    .navigationBarsPadding(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Button(
+                OutlinedButton(
                     onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface,
                     ),
-                    contentPadding = PaddingValues(vertical = 14.dp),
-                ) { Text("Hủy") }
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Text("Hủy", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
                 Button(
                     onClick = {
                         val llmInput = transaction?.llmInputJson?.ifBlank { null }
@@ -430,10 +504,29 @@ internal fun TransactionEditorSheet(
                             llmInput,
                         )
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.65f).height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
                     enabled = validation.isValid,
-                    contentPadding = PaddingValues(vertical = 14.dp),
-                ) { Text(if (transaction == null) "Thêm giao dịch" else "Lưu thay đổi") }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF006A47),
+                        contentColor = Color.White,
+                        disabledContainerColor = Color(0xFF006A47).copy(alpha = 0.35f),
+                        disabledContentColor = Color.White.copy(alpha = 0.6f),
+                    ),
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (transaction == null) "Thêm giao dịch" else "Lưu thay đổi",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
     }
