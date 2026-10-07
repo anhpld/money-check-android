@@ -1,8 +1,6 @@
 package com.example.moneycheck
 
 import android.Manifest
-import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -10,9 +8,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,9 +22,6 @@ import androidx.lifecycle.lifecycleScope
 import com.example.moneycheck.data.MoneyCheckRepository
 import com.example.moneycheck.notification.AppVisibility
 import com.example.moneycheck.notification.ConfirmationNotifier
-import com.example.moneycheck.accessibility.ScreenTransactionCaptureService
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
-import com.example.moneycheck.settings.AppSettings
 import com.example.moneycheck.ui.MoneyCheckApp
 import com.example.moneycheck.ui.theme.MoneyCheckTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +33,6 @@ class MainActivity : ComponentActivity() {
     private val hasListenerAccess = MutableStateFlow(false)
     private val canPostConfirmations = MutableStateFlow(false)
     private val canDrawOverlays = MutableStateFlow(false)
-    private val hasScreenCaptureAccess = MutableStateFlow(false)
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { refreshNotificationState() }
@@ -63,30 +57,27 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+        )
         ConfirmationNotifier.ensureChannel(this)
         handleIntent(intent)
         setContent {
             val listenerAccess = hasListenerAccess.collectAsStateWithLifecycle()
             val postConfirmationAccess = canPostConfirmations.collectAsStateWithLifecycle()
             val overlayAccess = canDrawOverlays.collectAsStateWithLifecycle()
-            val screenCaptureAccess = hasScreenCaptureAccess.collectAsStateWithLifecycle()
             MoneyCheckTheme {
                 MoneyCheckApp(
                     viewModel = viewModel,
                     hasNotificationAccess = listenerAccess.value,
                     canPostConfirmations = postConfirmationAccess.value,
                     canDrawOverlays = overlayAccess.value,
-                    hasScreenCaptureAccess = screenCaptureAccess.value,
                     onOpenNotificationAccess = {
                         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                     },
                     onRequestPostNotifications = ::requestOrOpenNotificationSettings,
                     onRequestOverlayPermission = ::openOverlayPermissionSettings,
-                    onOpenScreenCaptureAccess = {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    },
-                    onStartScreenRead = ::startManualScreenRead,
                     onExportDatabase = {
                         databaseExportLauncher.launch("moneycheck-${LocalDate.now()}.db")
                     },
@@ -112,7 +103,6 @@ class MainActivity : ComponentActivity() {
         hasListenerAccess.value = packageName in NotificationManagerCompat.getEnabledListenerPackages(this)
         refreshNotificationState()
         canDrawOverlays.value = Settings.canDrawOverlays(this)
-        hasScreenCaptureAccess.value = isScreenCaptureServiceEnabled()
         viewModel.refreshSettings()
     }
 
@@ -163,42 +153,6 @@ class MainActivity : ComponentActivity() {
                 Uri.parse("package:$packageName"),
             ),
         )
-    }
-
-    private fun startManualScreenRead() {
-        if (!isScreenCaptureServiceEnabled()) {
-            Toast.makeText(this, "Hãy bật quyền Đọc màn hình giao dịch", Toast.LENGTH_LONG).show()
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            return
-        }
-        if (!Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "Hãy cấp quyền hiển thị trên ứng dụng khác", Toast.LENGTH_LONG).show()
-            openOverlayPermissionSettings()
-            return
-        }
-        val appSettings = AppSettings.get(this)
-        if (appSettings.apiKey().isNullOrBlank()) {
-            Toast.makeText(this, "Chưa cấu hình API key", Toast.LENGTH_LONG).show()
-            return
-        }
-        ScreenCaptureSessionStore(this).start()
-        ScreenTransactionCaptureService.refreshManualSession()
-        viewModel.refreshSettings()
-        Toast.makeText(
-            this,
-            "Mở app cần đọc, vào chi tiết giao dịch rồi nhấn nút Lưu thủ công",
-            Toast.LENGTH_LONG,
-        ).show()
-    }
-
-    private fun isScreenCaptureServiceEnabled(): Boolean {
-        val expected = ComponentName(this, ScreenTransactionCaptureService::class.java)
-        val manager = getSystemService(AccessibilityManager::class.java)
-        return manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-            .any { service ->
-                val info = service.resolveInfo.serviceInfo
-                ComponentName(info.packageName, info.name) == expected
-            }
     }
 
     companion object {

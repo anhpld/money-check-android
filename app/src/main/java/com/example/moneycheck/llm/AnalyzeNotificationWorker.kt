@@ -1,16 +1,13 @@
 package com.example.moneycheck.llm
 
 import android.content.Context
-import android.widget.Toast
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.moneycheck.accessibility.ScreenCaptureSessionStore
 import com.example.moneycheck.data.MoneyCheckRepository
 import com.example.moneycheck.notification.AppVisibility
 import com.example.moneycheck.notification.ConfirmationNotifier
 import com.example.moneycheck.notification.OverlayConfirmationLauncher
 import com.example.moneycheck.settings.AppSettings
-import org.json.JSONObject
 import java.io.IOException
 
 class AnalyzeNotificationWorker(
@@ -23,45 +20,25 @@ class AnalyzeNotificationWorker(
 
         val repository = MoneyCheckRepository.get(applicationContext)
         val notification = repository.getNotification(notificationId)?.notification ?: return Result.failure()
-        val isManualScreen = ScreenCaptureSessionStore.isManualScreenEvent(notification.eventId)
         val settings = AppSettings.get(applicationContext)
         val apiKey = settings.apiKey()
         if (apiKey.isNullOrBlank()) {
             repository.saveError(notificationId, "Chưa cấu hình API key")
-            if (isManualScreen) showToast("Chưa cấu hình API key")
             return Result.failure()
         }
 
         repository.markProcessing(notificationId)
         return try {
-            val screenPayload = if (isManualScreen) {
-                runCatching { JSONObject(notification.rawPayload) }.getOrNull()
-            } else {
-                null
-            }
-            val model = screenPayload?.optString("model")?.takeIf(String::isNotBlank) ?: settings.model()
-            val draft = if (isManualScreen) {
-                OpenAiClient().analyzeScreen(
-                    notification = notification,
-                    apiBaseUrl = settings.apiBaseUrl(),
-                    apiKey = apiKey,
-                    model = model,
-                    prompt = screenPayload?.optString("prompt")?.takeIf(String::isNotBlank)
-                        ?: settings.screenPrompt(notification.packageName),
-                    cleanedXml = notification.expandedContent,
-                )
-            } else {
-                OpenAiClient().analyze(
-                    notification = notification,
-                    apiBaseUrl = settings.apiBaseUrl(),
-                    apiKey = apiKey,
-                    model = model,
-                    prompt = settings.prompt(),
-                )
-            }
+            val draft = OpenAiClient().analyze(
+                notification = notification,
+                apiBaseUrl = settings.apiBaseUrl(),
+                apiKey = apiKey,
+                model = settings.model(),
+                prompt = settings.prompt(),
+            )
             repository.saveAnalysis(notificationId, draft)
             repository.removeAutoMatched(notificationId)
-            if (isManualScreen || !AppVisibility.isForeground) {
+            if (!AppVisibility.isForeground) {
                 ConfirmationNotifier.show(
                     applicationContext,
                     notificationId,
@@ -69,7 +46,7 @@ class AnalyzeNotificationWorker(
                     draft.amount,
                     draft.purpose,
                 )
-                if (isManualScreen || settings.overlayEnabled()) {
+                if (settings.overlayEnabled()) {
                     OverlayConfirmationLauncher.show(applicationContext, notificationId)
                 }
             }
@@ -77,14 +54,7 @@ class AnalyzeNotificationWorker(
         } catch (error: Exception) {
             val message = error.message?.take(300) ?: "Không thể phân tích dữ liệu"
             repository.saveError(notificationId, message)
-            if (isManualScreen) showToast("Không thể phân tích màn hình: $message")
             if (error is IOException && runAttemptCount < 2) Result.retry() else Result.failure()
-        }
-    }
-
-    private fun showToast(message: String) {
-        applicationContext.mainExecutor.execute {
-            Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
         }
     }
 

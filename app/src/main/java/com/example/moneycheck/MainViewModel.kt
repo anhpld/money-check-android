@@ -1,6 +1,10 @@
 package com.example.moneycheck
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Base64
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,13 +13,16 @@ import com.example.moneycheck.data.AnalysisStatus
 import com.example.moneycheck.data.CapturedNotificationEntity
 import com.example.moneycheck.data.MoneyCheckRepository
 import com.example.moneycheck.llm.NotificationAnalysisScheduler
+import com.example.moneycheck.llm.OpenAiClient
 import com.example.moneycheck.llm.OpenAiCompatibleEndpoint
 import com.example.moneycheck.llm.OpenAiModelsClient
 import com.example.moneycheck.llm.TransactionChatClient
+import com.example.moneycheck.llm.exactTransactionCountAnswer
 import com.example.moneycheck.notification.ConfirmationNotifier
 import com.example.moneycheck.settings.AppSettings
 import com.example.moneycheck.settings.InstalledApp
 import com.example.moneycheck.settings.loadLaunchableApps
+import com.example.moneycheck.ui.TransactionInitialDraft
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +31,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.security.MessageDigest
 
 data class OpenAiConnectionState(
@@ -43,6 +52,7 @@ data class ChatState(
     val messages: List<ChatMessage> = emptyList(),
     val isSending: Boolean = false,
     val errorMessage: String? = null,
+    val selectedModel: String = "",
 )
 
 data class RetestState(
@@ -93,8 +103,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _openAiConnection = MutableStateFlow(OpenAiConnectionState())
     val openAiConnection = _openAiConnection.asStateFlow()
 
-    private val _chatState = MutableStateFlow(ChatState())
+    private val _chatState = MutableStateFlow(ChatState(selectedModel = appSettings.chatModel()))
     val chatState = _chatState.asStateFlow()
+
+    private val _isAnalyzingImage = MutableStateFlow(false)
+    val isAnalyzingImage = _isAnalyzingImage.asStateFlow()
 
     private val _retestStates = MutableStateFlow<Map<Long, RetestState>>(emptyMap())
     val retestStates = _retestStates.asStateFlow()
@@ -331,14 +344,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         validateOpenAiKey(appSettings.apiBaseUrl(), "")
     }
 
-    fun saveSettings(
+    fun saveLocalPreferences(
+        prompt: String,
+        notificationRules: Map<String, Set<String>>,
+        overlayEnabled: Boolean,
+    ) {
+        appSettings.savePrompt(prompt)
+        appSettings.saveNotificationRules(notificationRules)
+        appSettings.saveOverlayEnabled(overlayEnabled)
+        _settings.value = appSettings.snapshot()
+    }
+
+    fun saveAiConnection(
         apiBaseUrl: String,
         model: String,
-        prompt: String,
         apiKey: String,
-        notificationRules: Map<String, Set<String>>,
-        screenPrompts: Map<String, String>,
-        overlayEnabled: Boolean,
     ): Boolean {
         val normalizedApiBaseUrl = runCatching { OpenAiCompatibleEndpoint.normalize(apiBaseUrl) }
             .getOrElse {
@@ -360,11 +380,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         appSettings.saveApiBaseUrl(normalizedApiBaseUrl)
         appSettings.saveModel(model)
-        appSettings.savePrompt(prompt)
         if (normalizedApiKey.isNotEmpty()) appSettings.saveApiKey(normalizedApiKey)
-        appSettings.saveNotificationRules(notificationRules)
-        appSettings.saveScreenPrompts(screenPrompts)
-        appSettings.saveOverlayEnabled(overlayEnabled)
         _settings.value = appSettings.snapshot()
         return true
     }
@@ -375,9 +391,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _settings.value = appSettings.snapshot()
     }
 
+    fun selectChatModel(model: String) {
+        val trimmed = model.trim()
+        if (trimmed.isNotBlank()) {
+            appSettings.saveChatModel(trimmed)
+            _chatState.value = _chatState.value.copy(selectedModel = trimmed)
+        }
+    }
+
     fun sendChatMessage(input: String) {
         val question = input.trim()
         if (question.isEmpty() || _chatState.value.isSending) return
+
+        exactTransactionCountAnswer(question, transactions.value.size)?.let { answer ->
+            val current = _chatState.value
+            _chatState.value = current.copy(
+                messages = current.messages +
+                    ChatMessage(id = System.nanoTime(), role = "user", content = question) +
+                    ChatMessage(id = System.nanoTime(), role = "assistant", content = answer),
+                errorMessage = null,
+            )
+            return
+        }
 
         val apiKey = appSettings.apiKey().orEmpty()
         if (apiKey.isBlank()) {
@@ -385,13 +420,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        val currentModel = _chatState.value.selectedModel.ifBlank { appSettings.model() }
         val userMessage = ChatMessage(
             id = System.nanoTime(),
             role = "user",
             content = question,
         )
         val conversation = _chatState.value.messages + userMessage
-        _chatState.value = ChatState(messages = conversation, isSending = true)
+        _chatState.value = _chatState.value.copy(messages = conversation, isSending = true, errorMessage = null)
 
         viewModelScope.launch(Dispatchers.IO) {
             val assistantMessageId = System.nanoTime()
@@ -401,7 +437,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 TransactionChatClient().chat(
                     apiBaseUrl = appSettings.apiBaseUrl(),
                     apiKey = apiKey,
-                    model = appSettings.model(),
+                    model = currentModel,
                     transactions = transactions.value,
                     conversation = conversation,
                     onDelta = { delta ->
@@ -409,7 +445,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val now = System.nanoTime()
                         if (now - lastUiUpdateNanos >= CHAT_STREAM_UI_INTERVAL_NANOS) {
                             lastUiUpdateNanos = now
-                            _chatState.value = ChatState(
+                            _chatState.value = _chatState.value.copy(
                                 messages = conversation + ChatMessage(
                                     id = assistantMessageId,
                                     role = "assistant",
@@ -421,15 +457,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     },
                 )
             }.onSuccess { answer ->
-                _chatState.value = ChatState(
+                _chatState.value = _chatState.value.copy(
                     messages = conversation + ChatMessage(
                         id = assistantMessageId,
                         role = "assistant",
                         content = answer,
                     ),
+                    isSending = false,
                 )
             }.onFailure { error ->
-                _chatState.value = ChatState(
+                _chatState.value = _chatState.value.copy(
                     messages = if (streamedAnswer.isEmpty()) conversation else {
                         conversation + ChatMessage(
                             id = assistantMessageId,
@@ -437,6 +474,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             content = streamedAnswer.toString(),
                         )
                     },
+                    isSending = false,
                     errorMessage = error.message?.take(300) ?: "Không thể gửi câu hỏi",
                 )
             }
@@ -444,7 +482,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearChat() {
-        if (!_chatState.value.isSending) _chatState.value = ChatState()
+        if (!_chatState.value.isSending) _chatState.value = ChatState(selectedModel = _chatState.value.selectedModel)
     }
 
     fun clearInbox() {
@@ -475,6 +513,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recipient: String,
         purpose: String,
         transactionTime: Long,
+        llmInputJson: String = "",
         onComplete: () -> Unit = {},
     ) {
         viewModelScope.launch {
@@ -487,6 +526,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     recipient,
                     purpose,
                     transactionTime,
+                    llmInputJson,
                 )
             }
             showToast("Đã thêm giao dịch")
@@ -521,6 +561,96 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             showToast("Đã cập nhật giao dịch")
             onComplete()
         }
+    }
+
+    fun analyzeTransactionImageBytes(
+        imageBytes: ByteArray,
+        onSuccess: (TransactionInitialDraft) -> Unit,
+    ) {
+        if (_isAnalyzingImage.value) return
+        val apiKey = appSettings.apiKey().orEmpty()
+        if (apiKey.isBlank()) {
+            showToast("Hãy cấu hình API URL và key trong Cài đặt")
+            return
+        }
+
+        _isAnalyzingImage.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val (base64Image, mimeType) = compressImageBytes(imageBytes)
+                val visionResult = OpenAiClient().analyzeImage(
+                    base64Image = base64Image,
+                    mimeType = mimeType,
+                    apiBaseUrl = appSettings.apiBaseUrl(),
+                    apiKey = apiKey,
+                    model = appSettings.model(),
+                )
+
+                val candidateAppName = visionResult.appName.trim()
+                val matchedApp = if (candidateAppName.isNotEmpty()) {
+                    _installedApps.value.firstOrNull { app ->
+                        app.label.contains(candidateAppName, ignoreCase = true) ||
+                            candidateAppName.contains(app.label, ignoreCase = true)
+                    }
+                } else null
+
+                TransactionInitialDraft(
+                    direction = if (visionResult.direction in setOf("income", "expense")) visionResult.direction else "expense",
+                    amount = visionResult.amount,
+                    recipient = visionResult.recipient,
+                    purpose = visionResult.purpose,
+                    appName = matchedApp?.label ?: candidateAppName.ifBlank { "Tiền mặt" },
+                    packageName = matchedApp?.packageName.orEmpty(),
+                    transactionTime = visionResult.transactionTime ?: System.currentTimeMillis(),
+                    rawModelJson = visionResult.rawModelJson,
+                )
+            }.onSuccess { draft ->
+                withContext(Dispatchers.Main) {
+                    _isAnalyzingImage.value = false
+                    onSuccess(draft)
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _isAnalyzingImage.value = false
+                    showToast(error.message?.take(300) ?: "Không thể đọc thông tin giao dịch từ ảnh")
+                }
+            }
+        }
+    }
+
+    private fun compressImageBytes(
+        imageBytes: ByteArray,
+    ): Pair<String, String> {
+        val boundsOptions = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, boundsOptions)
+        if (boundsOptions.outWidth <= 0 || boundsOptions.outHeight <= 0) {
+            throw IOException("Tệp được chọn không phải là hình ảnh hợp lệ")
+        }
+
+        val maxDimension = 1600
+        var sampleSize = 1
+        val (width, height) = boundsOptions.outWidth to boundsOptions.outHeight
+        if (width > maxDimension || height > maxDimension) {
+            val halfWidth = width / 2
+            val halfHeight = height / 2
+            while ((halfWidth / sampleSize) >= maxDimension && (halfHeight / sampleSize) >= maxDimension) {
+                sampleSize *= 2
+            }
+        }
+
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+        }
+        val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, decodeOptions)
+            ?: throw IOException("Không thể giải mã hình ảnh")
+
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+        val byteArray = outputStream.toByteArray()
+        val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        return base64 to "image/jpeg"
     }
 
     fun refreshSettings() {
