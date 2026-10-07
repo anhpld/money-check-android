@@ -103,7 +103,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.ImageBitmap
@@ -310,7 +315,7 @@ internal fun TransactionDayHeader(date: LocalDate, transactions: List<Transactio
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 18.dp, bottom = 8.dp),
+            .padding(top = 6.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -345,6 +350,32 @@ internal fun TransactionDayHeader(date: LocalDate, transactions: List<Transactio
     }
 }
 
+fun Modifier.dropShadow(
+    color: Color = Color(0x33000000),
+    offsetX: androidx.compose.ui.unit.Dp = 0.dp,
+    offsetY: androidx.compose.ui.unit.Dp = 3.dp,
+    blurRadius: androidx.compose.ui.unit.Dp = 7.dp,
+    shapeRadius: androidx.compose.ui.unit.Dp = 8.dp,
+): Modifier = this.drawBehind {
+    val shadowColor = color.toArgb()
+    this.drawIntoCanvas { canvas ->
+        val paint = android.graphics.Paint().apply {
+            this.color = shadowColor
+            this.isAntiAlias = true
+            this.maskFilter = android.graphics.BlurMaskFilter(blurRadius.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+        }
+        canvas.nativeCanvas.drawRoundRect(
+            offsetX.toPx(),
+            offsetY.toPx(),
+            size.width + offsetX.toPx(),
+            size.height + offsetY.toPx(),
+            shapeRadius.toPx(),
+            shapeRadius.toPx(),
+            paint
+        )
+    }
+}
+
 @Composable
 internal fun TransactionCard(
     transaction: TransactionEntity,
@@ -359,12 +390,16 @@ internal fun TransactionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable {
-                showLlmInput = true
-            },
+            .dropShadow(
+                color = Color(0x2E000000),
+                offsetY = 3.dp,
+                blurRadius = 6.dp,
+                shapeRadius = 8.dp,
+            )
+            .clickable { onEdit() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 7.dp),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(8.dp),
     ) {
         Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

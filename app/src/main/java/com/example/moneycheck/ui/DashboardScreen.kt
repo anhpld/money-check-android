@@ -247,7 +247,7 @@ internal fun TransactionScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             Row(verticalAlignment = Alignment.Top) {
@@ -389,17 +389,19 @@ internal fun TransactionScreen(
         } else {
             groupedTransactions.forEach { (date, dayTransactions) ->
                 item(key = "day:${date.toEpochDay()}") {
-                    TransactionDayHeader(date = date, transactions = dayTransactions)
-                }
-                items(dayTransactions, key = TransactionEntity::id) { transaction ->
-                    TransactionCard(
-                        transaction = transaction,
-                        onEdit = {
-                            transactionToEditId = transaction.id
-                            showTransactionEditor = true
-                        },
-                        onDelete = { transactionToDelete = transaction },
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TransactionDayHeader(date = date, transactions = dayTransactions)
+                        dayTransactions.forEach { transaction ->
+                            TransactionCard(
+                                transaction = transaction,
+                                onEdit = {
+                                    transactionToEditId = transaction.id
+                                    showTransactionEditor = true
+                                },
+                                onDelete = { transactionToDelete = transaction },
+                            )
+                        }
+                    }
                 }
             }
         }
