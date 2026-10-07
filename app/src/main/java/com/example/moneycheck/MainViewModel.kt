@@ -436,9 +436,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 TransactionChatClient().chat(
                     apiBaseUrl = appSettings.apiBaseUrl(),
-                    apiKey = apiKey,
+                    authBearerToken = apiKey,
                     model = currentModel,
-                    transactions = transactions.value,
+                    transactionCount = transactions.value.size,
                     conversation = conversation,
                     onDelta = { delta ->
                         streamedAnswer.append(delta)
@@ -455,6 +455,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         }
                     },
+                    executeQuery = { sql -> repository.executeReadOnlyQuery(sql) },
                 )
             }.onSuccess { answer ->
                 _chatState.value = _chatState.value.copy(

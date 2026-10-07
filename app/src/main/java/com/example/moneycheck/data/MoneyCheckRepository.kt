@@ -66,6 +66,48 @@ class MoneyCheckRepository private constructor(context: Context) {
         destination.flush()
     }
 
+    suspend fun executeReadOnlyQuery(sql: String): String = io {
+        val trimmed = sql.trim()
+        val errorMsg = validateReadOnlySql(trimmed)
+        if (errorMsg != null) {
+            return@io JSONObject().apply {
+                put("error", errorMsg)
+            }.toString()
+        }
+        try {
+            val database = helper.readableDatabase
+            database.rawQuery(trimmed, null).use { cursor ->
+                val columnNames = cursor.columnNames
+                val rows = org.json.JSONArray()
+                var count = 0
+                while (cursor.moveToNext() && count < 100) {
+                    val row = JSONObject()
+                    for (i in columnNames.indices) {
+                        val name = columnNames[i]
+                        when (cursor.getType(i)) {
+                            Cursor.FIELD_TYPE_NULL -> row.put(name, JSONObject.NULL)
+                            Cursor.FIELD_TYPE_INTEGER -> row.put(name, cursor.getLong(i))
+                            Cursor.FIELD_TYPE_FLOAT -> row.put(name, cursor.getDouble(i))
+                            Cursor.FIELD_TYPE_STRING -> row.put(name, cursor.getString(i))
+                            Cursor.FIELD_TYPE_BLOB -> row.put(name, "<blob>")
+                        }
+                    }
+                    rows.put(row)
+                    count++
+                }
+                JSONObject().apply {
+                    put("total_matching_rows", cursor.count)
+                    put("returned_rows", count)
+                    put("data", rows)
+                }.toString()
+            }
+        } catch (e: Exception) {
+            JSONObject().apply {
+                put("error", e.message ?: "Lỗi thực thi SQL")
+            }.toString()
+        }
+    }
+
     /** Creates a fresh temporary row so a saved sample remains immutable and reusable. */
     suspend fun createTestRun(savedNotificationId: Long): Long? = io {
         val sample = loadNotification(savedNotificationId)?.notification
@@ -555,6 +597,21 @@ class MoneyCheckRepository private constructor(context: Context) {
         fun get(context: Context): MoneyCheckRepository = instance ?: synchronized(this) {
             instance ?: MoneyCheckRepository(context.applicationContext).also { instance = it }
         }
+
+        fun validateReadOnlySql(sql: String): String? {
+            val clean = sql.trim().lowercase(java.util.Locale.ROOT)
+            if (!clean.startsWith("select") && !clean.startsWith("with") && !clean.startsWith("explain")) {
+                return "Chỉ được phép thực hiện câu lệnh SELECT."
+            }
+            val forbidden = listOf(
+                ";", "insert ", "update ", "delete ", "drop ", "alter ", "create ", "replace ",
+                "truncate ", "attach ", "detach ", "vacuum ", "pragma "
+            )
+            if (forbidden.any { it in clean }) {
+                return "Câu lệnh chứa từ khóa không được phép."
+            }
+            return null
+        }
     }
 }
 
@@ -562,6 +619,26 @@ private class MoneyCheckOpenHelper(context: Context) : SQLiteOpenHelper(context,
     override fun onConfigure(database: SQLiteDatabase) {
         super.onConfigure(database)
         database.setForeignKeyConstraintsEnabled(true)
+    }
+
+    override fun onOpen(database: SQLiteDatabase) {
+        super.onOpen(database)
+        database.execSQL(
+            """
+            CREATE VIEW IF NOT EXISTS v_transactions AS
+            SELECT
+                id,
+                direction,
+                amount,
+                recipient,
+                purpose,
+                appName,
+                date(transactionTime / 1000, 'unixepoch', 'localtime') AS transaction_date,
+                time(transactionTime / 1000, 'unixepoch', 'localtime') AS transaction_clock,
+                transactionTime
+            FROM transactions
+            """.trimIndent(),
+        )
     }
 
     override fun onCreate(database: SQLiteDatabase) {
