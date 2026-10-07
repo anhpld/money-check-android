@@ -501,12 +501,12 @@ internal fun SettingsScreen(
 
         item {
             SettingsSection(
-                title = "Dữ liệu",
-                subtitle = "Sao lưu database SQLite để mở bằng ứng dụng đọc SQLite hoặc lưu trữ ở nơi khác.",
+                title = "Dữ liệu & Sao lưu",
+                subtitle = "Sao lưu toàn diện bao gồm cơ sở dữ liệu giao dịch và toàn bộ cấu hình ứng dụng.",
                 modifier = Modifier.padding(horizontal = 24.dp),
             ) {
                 Text(
-                    "File xuất ra chứa dữ liệu giao dịch và notification. API key cùng cấu hình ứng dụng không được đưa vào file.",
+                    "Gói sao lưu (.zip) chứa toàn bộ cơ sở dữ liệu giao dịch, notification và các cấu hình API URL, Model, Rules. Hỗ trợ phục hồi cả gói sao lưu .zip mới lẫn file .db cũ.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -514,13 +514,13 @@ internal fun SettingsScreen(
                     onClick = onExportDatabase,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Xuất file database (.db)")
+                    Text("Xuất gói sao lưu (.zip)")
                 }
                 OutlinedButton(
                     onClick = { showImportConfirmDialog = true },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Nhập file database (.db)")
+                    Text("Nhập sao lưu (.zip hoặc .db)")
                 }
             }
         }
@@ -542,10 +542,10 @@ internal fun SettingsScreen(
     if (showImportConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showImportConfirmDialog = false },
-            title = { Text("Nhập database sao lưu?") },
+            title = { Text("Phục hồi dữ liệu sao lưu?") },
             text = {
                 Text(
-                    "Thao tác này sẽ ghi đè toàn bộ dữ liệu giao dịch và thông báo hiện tại bằng dữ liệu từ file sao lưu đã chọn. Bạn có chắc chắn muốn tiếp tục?",
+                    "Thao tác này sẽ phục hồi giao dịch và cấu hình từ file đã chọn (hỗ trợ cả gói sao lưu .zip và file .db cũ). Dữ liệu hiện tại sẽ được thay thế bằng bản sao lưu. Bạn có chắc chắn muốn tiếp tục?",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },

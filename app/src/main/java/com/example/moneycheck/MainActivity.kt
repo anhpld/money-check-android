@@ -37,19 +37,19 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { refreshNotificationState() }
     private val databaseExportLauncher = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/vnd.sqlite3"),
+        ActivityResultContracts.CreateDocument("application/zip"),
     ) { destination ->
         if (destination == null) return@registerForActivityResult
         lifecycleScope.launch {
             val result = runCatching {
                 contentResolver.openOutputStream(destination, "wt").use { output ->
                     checkNotNull(output) { "Không thể mở file đã chọn" }
-                    MoneyCheckRepository.get(this@MainActivity).exportDatabase(output)
+                    MoneyCheckRepository.get(this@MainActivity).exportBackup(output)
                 }
             }
             Toast.makeText(
                 this@MainActivity,
-                if (result.isSuccess) "Đã xuất database" else "Không thể xuất database: ${result.exceptionOrNull()?.message.orEmpty()}",
+                if (result.isSuccess) "Đã xuất gói sao lưu thành công (.zip)" else "Không thể xuất sao lưu: ${result.exceptionOrNull()?.message.orEmpty()}",
                 Toast.LENGTH_LONG,
             ).show()
         }
@@ -62,12 +62,12 @@ class MainActivity : ComponentActivity() {
             val result = runCatching {
                 contentResolver.openInputStream(sourceUri).use { input ->
                     checkNotNull(input) { "Không thể mở file đã chọn" }
-                    MoneyCheckRepository.get(this@MainActivity).importDatabase(input)
+                    MoneyCheckRepository.get(this@MainActivity).importBackup(input)
                 }
             }
             Toast.makeText(
                 this@MainActivity,
-                if (result.isSuccess) "Đã nhập database thành công" else "Không thể nhập database: ${result.exceptionOrNull()?.message.orEmpty()}",
+                if (result.isSuccess) result.getOrNull().orEmpty() else "Không thể nhập sao lưu: ${result.exceptionOrNull()?.message.orEmpty()}",
                 Toast.LENGTH_LONG,
             ).show()
         }
@@ -97,10 +97,10 @@ class MainActivity : ComponentActivity() {
                     onRequestPostNotifications = ::requestOrOpenNotificationSettings,
                     onRequestOverlayPermission = ::openOverlayPermissionSettings,
                     onExportDatabase = {
-                        databaseExportLauncher.launch("moneycheck-${LocalDate.now()}.db")
+                        databaseExportLauncher.launch("moneycheck-backup-${LocalDate.now()}.zip")
                     },
                     onImportDatabase = {
-                        databaseImportLauncher.launch(arrayOf("*/*"))
+                        databaseImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "application/vnd.sqlite3", "*/*"))
                     },
                 )
             }

@@ -126,6 +126,65 @@ class AppSettings private constructor(context: Context) {
         preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, enabled).apply()
     }
 
+    fun exportSettingsJson(): String {
+        val root = JSONObject()
+        root.put("version", 1)
+        root.put("apiBaseUrl", apiBaseUrl())
+        apiKey()?.takeIf(String::isNotBlank)?.let { root.put("apiKey", it) }
+        root.put("model", model())
+        root.put("chatModel", chatModel())
+        root.put("prompt", prompt())
+        root.put("overlayEnabled", overlayEnabled())
+
+        val rulesJson = JSONObject()
+        notificationRules().forEach { (pkg, titles) ->
+            rulesJson.put(pkg, JSONArray(titles.sorted()))
+        }
+        root.put("notificationRules", rulesJson)
+        return root.toString(2)
+    }
+
+    fun importSettingsJson(jsonString: String) {
+        val root = JSONObject(jsonString)
+        if (root.has("apiBaseUrl")) {
+            saveApiBaseUrl(root.optString("apiBaseUrl", DEFAULT_API_BASE_URL))
+        }
+        if (root.has("apiKey")) {
+            val key = root.optString("apiKey", "")
+            if (key.isNotBlank()) {
+                saveApiKey(key)
+            }
+        }
+        if (root.has("model")) {
+            saveModel(root.optString("model", DEFAULT_MODEL))
+        }
+        if (root.has("chatModel")) {
+            saveChatModel(root.optString("chatModel", DEFAULT_MODEL))
+        }
+        if (root.has("prompt")) {
+            savePrompt(root.optString("prompt", DEFAULT_PROMPT))
+        }
+        if (root.has("overlayEnabled")) {
+            saveOverlayEnabled(root.optBoolean("overlayEnabled", false))
+        }
+        if (root.has("notificationRules")) {
+            val rulesJson = root.optJSONObject("notificationRules")
+            if (rulesJson != null) {
+                val rules = buildMap {
+                    rulesJson.keys().forEach { pkg ->
+                        val arr = rulesJson.optJSONArray(pkg) ?: JSONArray()
+                        put(pkg, buildSet {
+                            for (i in 0 until arr.length()) {
+                                arr.optString(i).trim().takeIf(String::isNotEmpty)?.let(::add)
+                            }
+                        })
+                    }
+                }
+                saveNotificationRules(rules)
+            }
+        }
+    }
+
     companion object {
         const val DEFAULT_API_BASE_URL = "https://api.openai.com/v1"
         const val DEFAULT_MODEL = "gpt-5.6-luna"

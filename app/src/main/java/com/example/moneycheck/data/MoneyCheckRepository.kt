@@ -14,6 +14,9 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 private const val DATABASE_NAME = "money-check.db"
 
@@ -55,55 +58,127 @@ class MoneyCheckRepository private constructor(context: Context) {
 
     suspend fun getNotification(id: Long): NotificationWithDraft? = io { loadNotification(id) }
 
-    suspend fun exportDatabase(destination: OutputStream) = io {
+    suspend fun exportBackup(destination: OutputStream) = io {
         val database = helper.writableDatabase
         database.rawQuery("PRAGMA wal_checkpoint(FULL)", null).use { cursor ->
             if (cursor.moveToFirst() && cursor.getInt(0) != 0) {
                 error("Database đang bận, vui lòng thử xuất lại")
             }
         }
-        appContext.getDatabasePath(DATABASE_NAME).inputStream().use { source ->
-            source.copyTo(destination)
+        val dbFile = appContext.getDatabasePath(DATABASE_NAME)
+        val settingsJson = com.example.moneycheck.settings.AppSettings.get(appContext).exportSettingsJson()
+        val manifestJson = JSONObject().apply {
+            put("version", 1)
+            put("app", "MoneyCheck")
+            put("exportedAt", System.currentTimeMillis())
+            put("dbFileName", "money-check.db")
+            put("hasSettings", true)
+        }.toString(2)
+
+        ZipOutputStream(destination.buffered()).use { zipOut ->
+            // Entry 1: manifest.json
+            zipOut.putNextEntry(ZipEntry("manifest.json"))
+            zipOut.write(manifestJson.toByteArray(Charsets.UTF_8))
+            zipOut.closeEntry()
+
+            // Entry 2: settings.json
+            zipOut.putNextEntry(ZipEntry("settings.json"))
+            zipOut.write(settingsJson.toByteArray(Charsets.UTF_8))
+            zipOut.closeEntry()
+
+            // Entry 3: database.db
+            zipOut.putNextEntry(ZipEntry("database.db"))
+            dbFile.inputStream().use { it.copyTo(zipOut) }
+            zipOut.closeEntry()
+
+            zipOut.flush()
         }
-        destination.flush()
     }
 
-    suspend fun importDatabase(source: InputStream) = io {
+    suspend fun importBackup(source: InputStream): String = io {
         val dbFile = appContext.getDatabasePath(DATABASE_NAME)
-        val tempFile = File(appContext.cacheDir, "temp_import_${System.currentTimeMillis()}.db")
+        val tempFile = File(appContext.cacheDir, "temp_import_${System.currentTimeMillis()}.bin")
         try {
             tempFile.outputStream().use { out ->
                 source.copyTo(out)
                 out.flush()
             }
-            if (tempFile.length() < 100) {
-                error("File database quá nhỏ hoặc không hợp lệ")
+            if (tempFile.length() < 16) {
+                error("File sao lưu quá nhỏ hoặc không hợp lệ")
             }
+
             val header = ByteArray(16)
             tempFile.inputStream().use { it.read(header) }
             val magic = String(header, Charsets.US_ASCII)
-            if (!magic.startsWith("SQLite format 3")) {
-                error("File không phải định dạng SQLite database hợp lệ")
+
+            var settingsRestored = false
+            val tempDbFile = File(appContext.cacheDir, "temp_db_${System.currentTimeMillis()}.db")
+
+            try {
+                if (magic.startsWith("PK")) {
+                    // Định dạng gói ZIP nén
+                    ZipFile(tempFile).use { zip ->
+                        val dbEntry = zip.getEntry("database.db")
+                            ?: zip.entries().asSequence().firstOrNull { it.name.endsWith(".db") }
+                            ?: error("Gói sao lưu không chứa file database (.db)")
+
+                        zip.getInputStream(dbEntry).use { input ->
+                            tempDbFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+
+                        val settingsEntry = zip.getEntry("settings.json")
+                        if (settingsEntry != null) {
+                            val settingsContent = zip.getInputStream(settingsEntry).bufferedReader(Charsets.UTF_8).use { it.readText() }
+                            com.example.moneycheck.settings.AppSettings.get(appContext).importSettingsJson(settingsContent)
+                            settingsRestored = true
+                        }
+                    }
+                } else if (magic.startsWith("SQLite format 3")) {
+                    // Định dạng file .db thuần túy (hỗ trợ file cũ)
+                    tempFile.copyTo(tempDbFile, overwrite = true)
+                } else {
+                    error("Định dạng file không được hỗ trợ (cần file .zip sao lưu hoặc file .db SQLite)")
+                }
+
+                val dbHeader = ByteArray(16)
+                tempDbFile.inputStream().use { it.read(dbHeader) }
+                if (!String(dbHeader, Charsets.US_ASCII).startsWith("SQLite format 3")) {
+                    error("File database trích xuất không hợp lệ")
+                }
+
+                helper.close()
+
+                val walFile = File(dbFile.parentFile, "$DATABASE_NAME-wal")
+                val shmFile = File(dbFile.parentFile, "$DATABASE_NAME-shm")
+                val journalFile = File(dbFile.parentFile, "$DATABASE_NAME-journal")
+                if (walFile.exists()) walFile.delete()
+                if (shmFile.exists()) shmFile.delete()
+                if (journalFile.exists()) journalFile.delete()
+
+                tempDbFile.copyTo(dbFile, overwrite = true)
+
+                backfillMissingTransactionTraces()
+                purgeExpiredInbox()
+                refreshAll()
+
+                if (settingsRestored) {
+                    "Đã phục hồi thành công cả Cơ sở dữ liệu và Cấu hình ứng dụng!"
+                } else {
+                    "Đã phục hồi thành công Cơ sở dữ liệu!"
+                }
+            } finally {
+                if (tempDbFile.exists()) tempDbFile.delete()
             }
-
-            helper.close()
-
-            val walFile = File(dbFile.parentFile, "$DATABASE_NAME-wal")
-            val shmFile = File(dbFile.parentFile, "$DATABASE_NAME-shm")
-            val journalFile = File(dbFile.parentFile, "$DATABASE_NAME-journal")
-            if (walFile.exists()) walFile.delete()
-            if (shmFile.exists()) shmFile.delete()
-            if (journalFile.exists()) journalFile.delete()
-
-            tempFile.copyTo(dbFile, overwrite = true)
-
-            backfillMissingTransactionTraces()
-            purgeExpiredInbox()
-            refreshAll()
         } finally {
             if (tempFile.exists()) tempFile.delete()
         }
     }
+
+    suspend fun exportDatabase(destination: OutputStream) = exportBackup(destination)
+
+    suspend fun importDatabase(source: InputStream) = importBackup(source)
 
     suspend fun executeReadOnlyQuery(sql: String): String = io {
         val trimmed = sql.trim()

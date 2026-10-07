@@ -19,12 +19,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("signing/release.jks")
+            storePassword = "moneycheck123"
+            keyAlias = "moneycheck"
+            keyPassword = "moneycheck123"
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("release")
+        }
         release {
-            // Keep local release builds installable while still running the full
-            // production R8 pipeline. Replace this with a private release key
-            // before publishing to an app store.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = true
             }
