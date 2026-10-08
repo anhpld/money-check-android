@@ -1450,6 +1450,21 @@ internal fun formatTransactionDateTime(timestamp: Long): String =
 internal fun formatTime(timestamp: Long): String =
     DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(timestamp))
 
+internal fun formatTime24h(timestamp: Long): String {
+    val dateTime = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalTime()
+    return String.format(Locale.ROOT, "%02d:%02d", dateTime.hour, dateTime.minute)
+}
+
+internal fun formatDateFormatSlash(timestamp: Long): String {
+    val date = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+    return String.format(Locale.ROOT, "%02d/%02d/%04d", date.dayOfMonth, date.monthValue, date.year)
+}
+
+internal fun formatEpochDaySlash(epochDay: Long): String {
+    val date = LocalDate.ofEpochDay(epochDay)
+    return String.format(Locale.ROOT, "%02d/%02d/%04d", date.dayOfMonth, date.monthValue, date.year)
+}
+
 internal fun Long.toLocalDate(): LocalDate =
     Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
 

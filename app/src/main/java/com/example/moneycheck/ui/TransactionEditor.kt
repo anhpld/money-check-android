@@ -446,17 +446,104 @@ internal fun TransactionEditorSheet(
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Outlined.DateRange, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(formatEpochDay(selectedEpochDay))
+                    Column(
+                        modifier = Modifier.weight(1.2f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "Ngày",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .clickable { showDatePicker = true },
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.DateRange,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF64748B),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = formatEpochDaySlash(selectedEpochDay),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Icon(
+                                    painter = painterResource(com.example.moneycheck.R.drawable.chevron_down_lucide),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color(0xFF94A3B8),
+                                )
+                            }
+                        }
                     }
-                    OutlinedButton(onClick = { showTimePicker = true }, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Outlined.Schedule, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(String.format(Locale.ROOT, "%02d:%02d", selectedHour, selectedMinute))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "Giờ",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .clickable { showTimePicker = true },
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Schedule,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF64748B),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = String.format(Locale.ROOT, "%02d:%02d", selectedHour, selectedMinute),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Icon(
+                                    painter = painterResource(com.example.moneycheck.R.drawable.chevron_down_lucide),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color(0xFF94A3B8),
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -104,6 +104,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -370,23 +371,104 @@ internal fun TransactionConfirmationDialog(
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedButton(
-                        onClick = { showTransactionDatePicker = true },
-                        modifier = Modifier.weight(1f),
+                    Column(
+                        modifier = Modifier.weight(1.2f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Icon(Icons.Outlined.DateRange, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(formatEpochDay(transactionTime.toLocalDate().toEpochDay()))
+                        Text(
+                            text = "Ngày",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .clickable { showTransactionDatePicker = true },
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.DateRange,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF64748B),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = formatDateFormatSlash(transactionTime),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Icon(
+                                    painter = painterResource(com.example.moneycheck.R.drawable.chevron_down_lucide),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color(0xFF94A3B8),
+                                )
+                            }
+                        }
                     }
-                    OutlinedButton(
-                        onClick = { showTransactionTimePicker = true },
+
+                    Column(
                         modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Icon(Icons.Outlined.Schedule, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(formatTime(transactionTime))
+                        Text(
+                            text = "Giờ",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .clickable { showTransactionTimePicker = true },
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Schedule,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF64748B),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = formatTime24h(transactionTime),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Icon(
+                                    painter = painterResource(com.example.moneycheck.R.drawable.chevron_down_lucide),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color(0xFF94A3B8),
+                                )
+                            }
+                        }
                     }
                 }
                 if (draft.transactionTime == null) {
@@ -396,13 +478,59 @@ internal fun TransactionConfirmationDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                OutlinedButton(
-                    onClick = { showLlmInput = true },
+
+                var showLlmPayload by rememberSaveable(item.notification.id) { mutableStateOf(false) }
+                Column(
                     modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Outlined.Code, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Xem chi tiết đầu vào LLM")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { showLlmPayload = !showLlmPayload }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            painter = painterResource(com.example.moneycheck.R.drawable.file_text_lucide),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFF475569),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Chi tiết đầu vào LLM",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF334155),
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Icon(
+                            painter = painterResource(com.example.moneycheck.R.drawable.chevron_down_lucide),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(15.dp)
+                                .then(if (showLlmPayload) Modifier.rotate(180f) else Modifier),
+                            tint = Color(0xFF64748B),
+                        )
+                    }
+                    if (showLlmPayload) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFF1F5F9), RoundedCornerShape(6.dp))
+                                .padding(12.dp),
+                        ) {
+                            Text(
+                                text = draft.rawModelJson.ifBlank { item.notification.rawPayload },
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp,
+                                color = Color(0xFF475569),
+                            )
+                        }
+                    }
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
