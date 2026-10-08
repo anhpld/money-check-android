@@ -97,6 +97,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -138,6 +139,7 @@ import com.example.moneycheck.settings.InstalledApp
 import com.example.moneycheck.settings.SettingsSnapshot
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.text.NumberFormat
@@ -181,6 +183,18 @@ internal fun TransactionConfirmationDialog(
     }
     val parsedAmount = amount.toLongOrNull()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+    var isSubmitting by remember { mutableStateOf(false) }
+
+    val animateAndDismiss: (onDone: () -> Unit) -> Unit = { onDone ->
+        if (!isSubmitting) {
+            isSubmitting = true
+            coroutineScope.launch {
+                sheetState.hide()
+                onDone()
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -221,7 +235,7 @@ internal fun TransactionConfirmationDialog(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)
-                        .clickable(onClick = onDismiss),
+                        .clickable(enabled = !isSubmitting, onClick = { animateAndDismiss(onDismiss) }),
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.surfaceVariant,
                 ) {
@@ -542,7 +556,8 @@ internal fun TransactionConfirmationDialog(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 OutlinedButton(
-                    onClick = onDismiss,
+                    onClick = { animateAndDismiss(onDismiss) },
+                    enabled = !isSubmitting,
                     modifier = Modifier.weight(1f).height(44.dp),
                     shape = RoundedCornerShape(8.dp),
                     border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
@@ -555,17 +570,19 @@ internal fun TransactionConfirmationDialog(
                 }
                 Button(
                     onClick = {
-                        onConfirm(
-                            direction,
-                            requireNotNull(parsedAmount),
-                            recipient.trim(),
-                            purpose.trim(),
-                            transactionTime,
-                        )
+                        animateAndDismiss {
+                            onConfirm(
+                                direction,
+                                requireNotNull(parsedAmount),
+                                recipient.trim(),
+                                purpose.trim(),
+                                transactionTime,
+                            )
+                        }
                     },
                     modifier = Modifier.weight(1.65f).height(44.dp),
                     shape = RoundedCornerShape(8.dp),
-                    enabled = parsedAmount != null && parsedAmount > 0 &&
+                    enabled = !isSubmitting && parsedAmount != null && parsedAmount > 0 &&
                         direction in setOf("income", "expense") && recipient.isNotBlank() && purpose.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF006A47),

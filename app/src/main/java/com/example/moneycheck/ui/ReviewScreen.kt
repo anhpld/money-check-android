@@ -1,6 +1,11 @@
 package com.example.moneycheck.ui
 
 import android.util.LruCache
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -18,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
@@ -32,6 +38,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
@@ -219,6 +227,7 @@ internal fun PendingConfirmationScreen(
                     onReview = { onReview(item.notification.id) },
                     onQuickConfirm = { onQuickConfirm(item) },
                     onCancel = { itemToCancel = item },
+                    modifier = Modifier.animateItem(),
                 )
             }
         }
@@ -257,8 +266,34 @@ internal fun PendingConfirmationCard(
     onReview: () -> Unit,
     onQuickConfirm: () -> Unit,
     onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val draft = requireNotNull(item.draft)
+    var isConfirming by remember { mutableStateOf(false) }
+
+    val offsetY by animateDpAsState(
+        targetValue = if (isConfirming) 150.dp else 0.dp,
+        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+        label = "cardSlideDown",
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (isConfirming) 0f else 1f,
+        animationSpec = tween(durationMillis = 280, easing = LinearEasing),
+        label = "cardFadeOut",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (isConfirming) 0.92f else 1f,
+        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+        label = "cardScale",
+    )
+
+    LaunchedEffect(isConfirming) {
+        if (isConfirming) {
+            delay(300)
+            onQuickConfirm()
+        }
+    }
+
     val income = draft.direction == "income"
     val expense = draft.direction == "expense"
     val amountColor = when {
@@ -281,7 +316,14 @@ internal fun PendingConfirmationCard(
         (draft.amount ?: 0L) > 0L && draft.recipient.isNotBlank() && draft.purpose.isNotBlank()
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .offset(y = offsetY)
+            .graphicsLayer {
+                this.alpha = alpha
+                this.scaleX = scale
+                this.scaleY = scale
+            },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         shape = RoundedCornerShape(8.dp),
@@ -357,8 +399,12 @@ internal fun PendingConfirmationCard(
                     )
                 }
                 Button(
-                    onClick = onQuickConfirm,
-                    enabled = canQuickConfirm,
+                    onClick = {
+                        if (!isConfirming) {
+                            isConfirming = true
+                        }
+                    },
+                    enabled = canQuickConfirm && !isConfirming,
                     modifier = Modifier.weight(1f).height(44.dp),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
