@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
@@ -68,6 +69,8 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Inbox
@@ -161,12 +164,29 @@ internal fun PendingConfirmationScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            PageHeader(
-                eyebrow = "KIỂM TRA TRƯỚC KHI LƯU",
-                title = "Cần xác nhận",
-                subtitle = "${notifications.size} bản nháp đang chờ",
-                eyebrowPill = false,
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                PageHeader(
+                    eyebrow = "KIỂM TRA TRƯỚC KHI LƯU",
+                    title = "Cần xác nhận",
+                    subtitle = "${notifications.size} bản nháp đang chờ",
+                    modifier = Modifier.weight(1f),
+                    eyebrowPill = false,
+                )
+                Surface(
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape,
+                    color = Color(0xFFDCFCE7),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(com.example.moneycheck.R.drawable.nav_list_checks),
+                            contentDescription = null,
+                            tint = Color(0xFF006A47),
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+            }
         }
         item {
             if (notifications.isNotEmpty()) {
@@ -268,12 +288,17 @@ internal fun PendingConfirmationCard(
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Surface(color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
-                    Text("CHỜ XÁC NHẬN", Modifier.padding(horizontal = 7.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.labelSmall)
+                Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(4.dp)) {
+                    Text("CHỜ XÁC NHẬN", Modifier.padding(horizontal = 7.dp, vertical = 4.dp), color = Color(0xFFD97706), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onCancel, modifier = Modifier.size(30.dp)) {
-                    Text("×", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Close,
+                        contentDescription = "Hủy",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
             Row(verticalAlignment = Alignment.Top) {
@@ -287,33 +312,13 @@ internal fun PendingConfirmationCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${item.notification.appName} · ${formatTransactionDateTime(transactionTime)}",
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            color = when {
-                                income -> MaterialTheme.colorScheme.primaryContainer
-                                expense -> MaterialTheme.colorScheme.errorContainer
-                                else -> MaterialTheme.colorScheme.surfaceVariant
-                            },
-                            shape = CircleShape,
-                        ) {
-                            Text(
-                                directionLabel,
-                                Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = amountColor,
-                                maxLines = 1,
-                            )
-                        }
-                    }
+                    Text(
+                        "${item.notification.appName} · ${formatEpochDay(transactionTime.toLocalDate().toEpochDay())}, ${formatTime(transactionTime)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -337,17 +342,38 @@ internal fun PendingConfirmationCard(
                 Text(draft.recipient.ifBlank { "Chưa xác định" }, style = MaterialTheme.typography.labelMedium, maxLines = 1)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onReview, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)) {
+                OutlinedButton(
+                    onClick = onReview,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                ) {
                     Text("Xem và sửa", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        painter = painterResource(com.example.moneycheck.R.drawable.arrow_right_lucide),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                    )
                 }
                 Button(
                     onClick = onQuickConfirm,
                     enabled = canQuickConfirm,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 ) {
-                    Text("✓  Duyệt nhanh", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Duyệt nhanh", style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
             }
         }

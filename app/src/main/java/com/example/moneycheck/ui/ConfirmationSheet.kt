@@ -272,6 +272,9 @@ internal fun TransactionConfirmationDialog(
                 )
             }
 
+            val isIncome = direction == "income"
+            val heroColor = if (isIncome) IncomeStrong else ExpenseStrong
+            val heroPrefix = if (isIncome) "+" else "−"
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -280,14 +283,14 @@ internal fun TransactionConfirmationDialog(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    formatMoney(parsedAmount ?: 0),
+                    heroPrefix + formatMoney(parsedAmount ?: 0),
                     fontSize = 33.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = heroColor,
                 )
                 Text(
-                    "${item.notification.appName} · ${formatDateTime(transactionTime)}",
-                    fontSize = 11.sp,
+                    item.notification.appName,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -326,6 +329,29 @@ internal fun TransactionConfirmationDialog(
                     singleLine = true,
                     shape = MaterialTheme.shapes.medium,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf(50_000L to "+50k", 100_000L to "+100k", 500_000L to "+500k", 1_000_000L to "+1tr").forEach { (step, label) ->
+                        OutlinedButton(
+                            onClick = {
+                                val current = parsedAmount ?: 0L
+                                amount = (current + step).toString()
+                            },
+                            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp),
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    androidx.compose.material3.TextButton(
+                        onClick = { amount = "" },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+                    ) {
+                        Text("Xóa", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
                 OutlinedTextField(
                     value = recipient,
                     onValueChange = { recipient = it },

@@ -243,10 +243,11 @@ internal fun TransactionScreen(
     val expense = filteredTransactions.filter { it.direction == "expense" }.sumOf { it.amount }
     val net = income - expense
     var transactionToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
+    var transactionForDetail by remember { mutableStateOf<TransactionEntity?>(null) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
@@ -394,6 +395,7 @@ internal fun TransactionScreen(
                         dayTransactions.forEach { transaction ->
                             TransactionCard(
                                 transaction = transaction,
+                                onClick = { transactionForDetail = transaction },
                                 onEdit = {
                                     transactionToEditId = transaction.id
                                     showTransactionEditor = true
@@ -415,6 +417,24 @@ internal fun TransactionScreen(
             onConfirm = {
                 onDelete(transaction.id)
                 transactionToDelete = null
+            },
+        )
+    }
+
+    transactionForDetail?.let { transaction ->
+        TransactionDetailSheet(
+            transaction = transaction,
+            onDismiss = { transactionForDetail = null },
+            onEdit = {
+                val toEdit = transactionForDetail
+                transactionForDetail = null
+                transactionToEditId = toEdit?.id
+                showTransactionEditor = true
+            },
+            onDelete = {
+                val toDel = transactionForDetail
+                transactionForDetail = null
+                transactionToDelete = toDel
             },
         )
     }

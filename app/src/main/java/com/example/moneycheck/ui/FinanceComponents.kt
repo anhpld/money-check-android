@@ -497,6 +497,7 @@ fun Modifier.dropShadow(
 @Composable
 internal fun TransactionCard(
     transaction: TransactionEntity,
+    onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -514,90 +515,137 @@ internal fun TransactionCard(
                 blurRadius = 6.dp,
                 shapeRadius = 8.dp,
             )
-            .clickable { onEdit() },
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(8.dp),
     ) {
         Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Top row: AppAvatar + (Purpose / App·Time / SourceTag) + Amount (aligned top-right)
             Row(verticalAlignment = Alignment.Top) {
                 AppAvatar(transaction.appName, transaction.packageName, size = 36)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    transaction.purpose.ifBlank { "Không có nội dung" },
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                    Text("${transaction.appName} · ${formatTime(transaction.transactionTime)}", fontSize = 9.sp, lineHeight = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                }
-                Box {
-                IconButton(
-                    onClick = { menuExpanded = true },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.MoreVert,
-                        contentDescription = "Tùy chọn giao dịch",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Text(
+                        transaction.purpose.ifBlank { "Không có nội dung" },
+                        fontSize = 14.sp,
+                        lineHeight = 19.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF0F172A),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Sửa giao dịch") },
-                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onEdit()
-                        },
+                    Text(
+                        "${transaction.appName} · ${formatTime(transaction.transactionTime)}",
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        color = Color(0xFF64748B),
+                        maxLines = 1,
                     )
-                    DropdownMenuItem(
-                        text = { Text("Dữ liệu trích xuất & Log") },
-                        leadingIcon = { Icon(Icons.Outlined.Code, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            showLlmInput = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Xóa giao dịch", color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Outlined.Delete,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
-                        },
-                    )
-                }
-            }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Surface(color = if (transaction.sourceType == TransactionSource.MANUAL) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
-                    Text(if (transaction.sourceType == TransactionSource.MANUAL) "Thủ công" else "Tự động", Modifier.padding(horizontal = 6.dp, vertical = 3.dp), fontSize = 8.sp, lineHeight = 11.sp, color = if (transaction.sourceType == TransactionSource.MANUAL) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
-                }
-                if (llmInput?.modelOutput?.isNotBlank() == true || transaction.llmInputJson.isNotBlank()) {
-                    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(4.dp)) {
-                        Text("Log LLM", Modifier.padding(horizontal = 6.dp, vertical = 3.dp), fontSize = 8.sp, lineHeight = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                if (transaction.sourceType == TransactionSource.MANUAL) {
+                                    com.example.moneycheck.R.drawable.pen_line_lucide
+                                } else {
+                                    com.example.moneycheck.R.drawable.shield_check_lucide
+                                }
+                            ),
+                            contentDescription = null,
+                            modifier = Modifier.size(11.dp),
+                            tint = Color(0xFF64748B),
+                        )
+                        Text(
+                            if (transaction.sourceType == TransactionSource.MANUAL) "Thủ công" else "Tự động",
+                            fontSize = 10.sp,
+                            color = Color(0xFF64748B),
+                        )
                     }
                 }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Người nhận: " + transaction.recipient.ifBlank { "chưa có" }, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.width(8.dp))
-                Text((if (income) "+" else "−") + formatMoney(transaction.amount), color = accent, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(
+                    (if (income) "+" else "−") + formatMoney(transaction.amount),
+                    color = accent,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+
+            // Bottom row: Recipient on left, MoreHorizontal button on right
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Người nhận: " + transaction.recipient.ifBlank { "chưa có" },
+                    Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 10.5.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(com.example.moneycheck.R.drawable.more_horizontal_lucide),
+                            contentDescription = "Tùy chọn giao dịch",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Sửa giao dịch") },
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(com.example.moneycheck.R.drawable.pencil_lucide),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Dữ liệu trích xuất & Log") },
+                            leadingIcon = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                showLlmInput = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Xóa giao dịch", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(com.example.moneycheck.R.drawable.trash_2_lucide),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                        )
+                    }
+                }
             }
         }
     }
