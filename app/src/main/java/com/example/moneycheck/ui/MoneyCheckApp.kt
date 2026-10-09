@@ -215,13 +215,11 @@ fun MoneyCheckApp(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Box(
-                        Modifier.size(29.dp).background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("m", color = MaterialTheme.colorScheme.onPrimary, fontSize = 23.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
-                        Text("✓", Modifier.align(Alignment.BottomEnd).offset(x = (-2).dp, y = 1.dp), color = MaterialTheme.colorScheme.onPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, lineHeight = 12.sp)
-                    }
+                    Image(
+                        painter = painterResource(com.example.moneycheck.R.drawable.moneycheck_brand),
+                        contentDescription = "Logo Moneycheck",
+                        modifier = Modifier.size(32.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+                    )
                     Text(
                         androidx.compose.ui.text.buildAnnotatedString {
                             append("moneycheck")

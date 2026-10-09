@@ -668,8 +668,11 @@ internal fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("m", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF006A47))
-                    Text("✓", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                    Image(
+                        painter = painterResource(com.example.moneycheck.R.drawable.moneycheck_brand),
+                        contentDescription = "Logo Moneycheck",
+                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(7.dp)),
+                    )
                     Spacer(Modifier.width(6.dp))
                     Text("Moneycheck", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A202C))
                 }
